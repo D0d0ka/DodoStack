@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f7ef">
+  <title>Dodo To-do — Make room for what matters</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="{{ url_for('index') }}" aria-label="Dodo To-do home">
+        <img src="{{ url_for('static', filename='images/dodo_sign.png') }}" alt="">
+        <span>dodo<span class="brand-light">list</span></span>
+      </a>
+      <div class="account-tools">
+        <span class="top-note"><span class="live-dot"></span> A little more organized</span>
+        <span class="account-name">{{ g.user.username }}</span>
+        <form action="{{ url_for('logout') }}" method="post"><button class="signout-button" type="submit">Sign out</button></form>
+      </div>
+    </header>
+
+    <main>
+      <section class="intro">
+        <div class="eyebrow"><span class="sparkle">✳</span> YOUR DAY, YOUR PACE</div>
+        <h1>Make room for<br><span>what matters.</span></h1>
+        <p>One small step at a time. You’ve got this.</p>
+      </section>
+
+      <section class="todo-card" aria-label="To-do list">
+        <div class="card-topline">
+          <div>
+            <span class="section-label">YOUR LIST</span>
+            <h2>{{ g.user.username }}’s list <span class="sun">☀</span></h2>
+          </div>
+          <div class="progress-badge"><span class="progress-icon">✓</span>{{ stats.completed or 0 }} done</div>
+        </div>
+
+        <form class="add-form" action="{{ url_for('add_todo') }}" method="post">
+          <label class="visually-hidden" for="new-task">Add a task</label>
+          <span class="add-plus" aria-hidden="true">+</span>
+          <input id="new-task" name="title" type="text" maxlength="180" placeholder="What would you like to do?" autocomplete="off" required>
+          <button type="submit">Add task <span aria-hidden="true">↗</span></button>
+        </form>
+
+        <div class="list-toolbar">
+          <nav class="filters" aria-label="Filter tasks">
+            {% for name, label in [('all', 'All'), ('active', 'To do'), ('completed', 'Done')] %}
+              <a class="filter-link {{ 'active' if selected == name else '' }}" href="{{ url_for('index', filter=name) }}" {% if selected == name %}aria-current="page"{% endif %}>{{ label }}{% if name == 'all' %}<span class="filter-count">{{ stats.total }}</span>{% endif %}</a>
+            {% endfor %}
+          </nav>
+          {% if stats.completed %}
+          <form action="{{ url_for('clear_completed') }}" method="post">
+            <button class="clear-button" type="submit">Clear done</button>
+          </form>
+          {% endif %}
+        </div>
+
+        {% if todos %}
+          <ul class="task-list">
+            {% for todo in todos %}
+            <li class="task-row {{ 'is-done' if todo.completed else '' }}">
+              <form action="{{ url_for('toggle_todo', todo_id=todo.id) }}" method="post" class="task-main">
+                <input type="hidden" name="filter" value="{{ selected }}">
+                <button class="check-button" type="submit" aria-label="{{ 'Mark as to do' if todo.completed else 'Mark as done' }}: {{ todo.title }}">{% if todo.completed %}<span>✓</span>{% endif %}</button>
+                <span class="task-title">{{ todo.title }}</span>
+              </form>
+              <form action="{{ url_for('delete_todo', todo_id=todo.id) }}" method="post" class="delete-form">
+                <input type="hidden" name="filter" value="{{ selected }}">
+                <button class="delete-button" type="submit" aria-label="Delete {{ todo.title }}" title="Delete task">×</button>
+              </form>
+            </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="empty-state">
+            <div class="empty-art" aria-hidden="true"><span>✳</span><i>✓</i></div>
+            {% if selected == 'completed' %}
+              <h3>No finished tasks yet</h3><p>Complete a task and it’ll show up here.</p>
+            {% elif selected == 'active' %}
+              <h3>All caught up!</h3><p>Nothing on your list right now. Enjoy the breathing room.</p>
+            {% else %}
+              <h3>Your list is a blank canvas</h3><p>Add a task above and make today yours.</p>
+            {% endif %}
+          </div>
+        {% endif %}
+
+        <footer class="card-footer">
+          <span><span class="footer-sparkle">✦</span> Small steps count.</span>
+          <span>{{ stats.remaining or 0 }} {{ 'task' if stats.remaining == 1 else 'tasks' }} left</span>
+        </footer>
+      </section>
+      <p class="closing-note">Made for the things that make a day <span>yours.</span></p>
+    </main>
+    <div class="decor decor-left" aria-hidden="true">✳</div>
+    <div class="decor decor-right" aria-hidden="true">✦</div>
+  </div>
+</body>
+</html>

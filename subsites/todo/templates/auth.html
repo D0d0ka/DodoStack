@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f7ef">
+  <title>{{ 'Create your account' if mode == 'signup' else 'Sign in' }} — Dodo To-do</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="page-shell auth-shell">
+    <header class="topbar">
+      <a class="brand" href="{{ url_for('login') }}" aria-label="Dodo To-do home">
+        <img src="{{ url_for('static', filename='images/dodo_sign.png') }}" alt="">
+        <span>dodo<span class="brand-light">list</span></span>
+      </a>
+      <span class="top-note"><span class="live-dot"></span> A little more organized</span>
+    </header>
+    <main class="auth-main">
+      <section class="intro auth-intro">
+        <div class="eyebrow"><span class="sparkle">✳</span> YOUR DAY, YOUR PACE</div>
+        <h1>{{ 'Start fresh.' if mode == 'signup' else 'Welcome back.' }}<br><span>One step at a time.</span></h1>
+        <p>Your list is ready when you are.</p>
+      </section>
+      <section class="auth-card">
+        <div class="auth-card-heading">
+          <span class="section-label">{{ 'MAKE IT YOURS' if mode == 'signup' else 'PICK UP WHERE YOU LEFT OFF' }}</span>
+          <h2>{{ 'Create your account' if mode == 'signup' else 'Sign in to Dodo' }}</h2>
+        </div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}<div class="form-message {{ category }}" role="alert">{{ message }}</div>{% endfor %}
+          {% endif %}
+        {% endwith %}
+        <form class="auth-form" method="post" action="{{ url_for(mode) }}">
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" autocomplete="username" placeholder="e.g. sunnyday" required autofocus>
+          {% if mode == 'signup' %}<span class="field-hint">3–24 letters, numbers, or underscores.</span>{% endif %}
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" minlength="8" autocomplete="{{ 'new-password' if mode == 'signup' else 'current-password' }}" placeholder="{{ 'At least 8 characters' if mode == 'signup' else 'Your password' }}" required>
+          {% if mode == 'signup' %}
+          <label for="password_confirmation">Confirm password</label>
+          <input id="password_confirmation" name="password_confirmation" type="password" minlength="8" autocomplete="new-password" placeholder="Type your password again" required>
+          {% endif %}
+          <button class="auth-submit" type="submit">{{ 'Create account' if mode == 'signup' else 'Sign in' }} <span aria-hidden="true">↗</span></button>
+        </form>
+        <p class="auth-switch">{{ 'Already have an account?' if mode == 'signup' else 'New to Dodo?' }} <a href="{{ url_for('login' if mode == 'signup' else 'signup') }}">{{ 'Sign in' if mode == 'signup' else 'Create an account' }}</a></p>
+      </section>
+      <p class="closing-note">Made for the things that make a day <span>yours.</span></p>
+    </main>
+    <div class="decor decor-left" aria-hidden="true">✳</div>
+    <div class="decor decor-right" aria-hidden="true">✦</div>
+  </div>
+</body>
+</html>
