@@ -4,7 +4,7 @@
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<title>Doodle Admin</title>
-	<link rel="icon" type="image/png" href="dodo.png" />
+	<link rel="icon" type="image/png" href="{{ admin_base }}/dodo.png" />
 	<link rel="stylesheet" href="{{ admin_base }}/style.css" />
 </head>
 <body class="admin-page" data-admin-base="{{ admin_base }}">
@@ -21,7 +21,7 @@
 		</div>
 	</header>
 
-	<main class="admin-main hidden" id="adminDashboard">
+	<main class="admin-main" id="adminDashboard">
 		<section class="admin-hero">
 			<div>
 				<p class="admin-eyebrow">Admin mode</p>
@@ -43,10 +43,6 @@
 				<div class="admin-card-body admin-form-grid">
 					<label class="settings-label" for="aiModelInput">AI mudel (Ollama)</label>
 					<input type="text" id="aiModelInput" placeholder="nt. phi, llama3, mistral" />
-
-					<label class="settings-label" for="newPasswordInput">Muuda parooli</label>
-					<input type="password" id="newPasswordInput" placeholder="Uus parool (min 4 tähemärki)" autocomplete="new-password" />
-					<input type="password" id="confirmPasswordInput" placeholder="Korda parooli" autocomplete="new-password" />
 
 					<div class="admin-feedback hidden" id="adminSettingsFeedback"></div>
 				</div>

@@ -64,14 +64,13 @@
         </div>
         <div class="admin-sidebar-links">
           <a href="{{ url_for('main.index') }}" target="_blank" rel="noopener">View site ↗</a>
-          <a href="{{ url_for('auth.profile') }}">Account</a>
         </div>
       </div>
     </aside>
 
     <div class="admin-main">
       <header class="admin-topbar">
-        <button type="button" class="icon-button admin-mobile-toggle" data-admin-toggle aria-label="Toggle admin navigation">
+        <button type="button" class="icon-button admin-mobile-toggle" data-admin-toggle aria-label="Toggle admin navigation" aria-controls="admin-sidebar" aria-expanded="false">
           <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
         <div>

@@ -6,4 +6,4 @@ Open **Admin → Dodo TV** in the workspace to manage movies, shows, episodes, s
 
 By default, the database is `instance/dodotv.db` and media lives under `uploads/` in this directory. Copy `.env.example` to `.env` to configure storage, FFmpeg, or upload limits. Dodo TV uses FFmpeg and FFprobe to validate videos and generate preview frames. Run `python server.py seed-tv-demo` from the project root to generate a demo catalog.
 
-The root README explains how to reuse existing data and attach legacy TV profiles to shared accounts.
+Use the **Creator or production company** field when adding or editing a movie or TV show. The credit appears on the title’s detail page.

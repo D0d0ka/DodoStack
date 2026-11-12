@@ -1,7 +1,7 @@
 """DodoStack main server: shared identity plus host-routed child services."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote_to_bytes, urlsplit
+from urllib.parse import unquote_to_bytes, urlencode, urlsplit
 from http.cookies import SimpleCookie
 import argparse
 import hashlib
@@ -16,10 +16,12 @@ from dodo.auth import AccountStore, Identity
 from dodo import pages
 from dodo.framework import Application, Response, redirect, request_from_handler
 from dodo.web import WebApplication
-from sqlalchemy.exc import IntegrityError
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 PORT = int(os.environ.get("DODO_PORT", "8000"))
+PRIVATE = os.environ.get("DODO_PRIVATE", "false").strip().lower() in {"true", "1", "yes", "on"}
 INSTANCE = BASE_DIR / "instance"
 INSTANCE.mkdir(exist_ok=True)
 secret_path = INSTANCE / "server.key"
@@ -31,7 +33,10 @@ else:
         secret_path.chmod(0o600)
     secret = secret_path.read_text(encoding="utf-8").strip()
 
-accounts = AccountStore(INSTANCE / "accounts.sqlite3", secret)
+accounts = AccountStore(
+    INSTANCE / "accounts.sqlite3", secret,
+    min_password_length=int(os.environ.get("DODO_MIN_PASSWORD_LENGTH", "8")),
+)
 SERVICE_MODULES = {
     "todo": "subsites.todo.app",
     "doodle": "subsites.doodle.app",
@@ -39,53 +44,27 @@ SERVICE_MODULES = {
     "dodotv": "subsites.DodoTV.run",
 }
 services = {name: f"{name}.localhost" for name in SERVICE_MODULES}
-identity = Identity(accounts, services, PORT)
+identity = Identity(accounts, services, PORT, private=PRIVATE)
 workspace = Application("workspace", static_dir=BASE_DIR / "static")
 
 
-def migrate_todo_accounts():
-    """Move existing Todo credentials into the shared account database."""
-    legacy = BASE_DIR / "subsites" / "todo" / "instance" / "todos.sqlite3"
-    if not legacy.exists():
-        return
-    source = sqlite3.connect(legacy)
-    source.row_factory = sqlite3.Row
-    tables = {row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    if "users" not in tables:
-        source.close()
-        return
-    target = accounts.connect()
-    target.execute("CREATE TABLE IF NOT EXISTS schema_migrations(name TEXT PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-    if target.execute("SELECT 1 FROM schema_migrations WHERE name='legacy_todo_accounts'").fetchone():
-        target.close()
-        source.close()
-        return
-    mapping = {}
-    for old in source.execute("SELECT id,username,password_hash,created_at FROM users ORDER BY id"):
-        existing = target.execute("SELECT id FROM users WHERE username=? COLLATE NOCASE", (old["username"],)).fetchone()
-        if existing:
-            new_id = existing["id"]
-        else:
-            cursor = target.execute("INSERT INTO users(username,password_hash,created_at) VALUES (?,?,?)", (old["username"], old["password_hash"], old["created_at"]))
-            new_id = cursor.lastrowid
-        mapping[old["id"]] = new_id
-    target.commit()
-    if "todos" in tables:
-        todo_columns = {row[1] for row in source.execute("PRAGMA table_info(todos)")}
-        if "user_id" in todo_columns:
-            source.execute("CREATE TEMP TABLE IF NOT EXISTS user_id_migration(old_id INTEGER PRIMARY KEY,new_id INTEGER NOT NULL)")
-            source.execute("DELETE FROM user_id_migration")
-            source.executemany("INSERT INTO user_id_migration(old_id,new_id) VALUES (?,?)", mapping.items())
-            source.execute("""UPDATE todos SET user_id=(SELECT new_id FROM user_id_migration WHERE old_id=todos.user_id)
-                WHERE user_id IN (SELECT old_id FROM user_id_migration)""")
-            source.commit()
-    target.execute("INSERT OR IGNORE INTO schema_migrations(name) VALUES ('legacy_todo_accounts')")
-    target.commit()
-    target.close()
-    source.close()
+BRAND_FILES = {
+    "stack": BASE_DIR / "assets/server-icon.png",
+    "todo": BASE_DIR / "subsites/todo/static/images/dodo_sign.png",
+    "doodle": BASE_DIR / "subsites/doodle/templates/dodo.png",
+    "dodobook": BASE_DIR / "subsites/dodobook/static/dodobook.png",
+    "dodotv": BASE_DIR / "subsites/DodoTV/dodotv.png",
+}
 
 
-migrate_todo_accounts()
+def workspace_static(request):
+    name = request.path.removeprefix("/static/branding/").removesuffix(".png")
+    logo = BRAND_FILES.get(name) if request.path.startswith("/static/branding/") else None
+    if logo:
+        return Response(logo.read_bytes(), headers={"Content-Type": "image/png"})
+    return workspace.dispatch(request)
+
+
 sys.path.insert(0, str(BASE_DIR))
 service_apps = {}
 for service_name, module_name in SERVICE_MODULES.items():
@@ -107,6 +86,9 @@ def control_panel(request):
     admin = path.startswith("/admin")
     if not user:
         return redirect("/login")
+    destination = identity.account_destination(user)
+    if destination and path != destination:
+        return redirect(destination)
     if admin and not user["is_admin"]:
         return Response.text("Administrator access required.", 403)
     token = hmac.new(accounts.secret, request.cookies[identity.main_session].encode(), hashlib.sha256).hexdigest()
@@ -115,6 +97,12 @@ def control_panel(request):
         if not hmac.compare_digest(token, request.value("csrf")):
             return Response.text("Invalid security token.", 403)
         try:
+            if path == "/account/email":
+                accounts.set_email(user["id"], request.value("email"))
+                return redirect("/")
+            if path == "/admin/approve":
+                accounts.approve(request.value("username"))
+                return redirect("/admin")
             if path == "/admin/role":
                 enabled = request.value("enabled")
                 if enabled not in {"0", "1"}:
@@ -131,10 +119,15 @@ def control_panel(request):
                 return redirect("/login")
         except ValueError as error:
             message = str(error)
+        except sqlite3.IntegrityError:
+            message = "That email is already in use."
     if admin:
-        response = Response.html(pages.admin_accounts(accounts.list_accounts(), identity.admin_tabs, token, message))
+        response = Response.html(pages.admin_accounts(accounts.list_accounts(), identity.admin_tabs, token, message,
+                                                      min_password_length=accounts.min_password_length))
+    elif path == "/account/email":
+        response = Response.html(pages.email_page(token, user["email"], message))
     else:
-        response = Response.html(pages.password_page(token, message))
+        response = Response.html(pages.password_page(token, message, min_password_length=accounts.min_password_length))
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -159,6 +152,8 @@ class DodoHandler(BaseHTTPRequestHandler):
             user = identity.session_user(session.value if session else None, "server")
             if not user:
                 response = redirect("/login")
+            elif destination := identity.account_destination(user):
+                response = redirect(destination)
             elif not user["is_admin"]:
                 response = Response.text("Administrator access required.", 403)
             elif len(parts) == 3 or not parts[3]:
@@ -166,16 +161,23 @@ class DodoHandler(BaseHTTPRequestHandler):
             else:
                 return self.serve_web(service_apps[service], service, "/" + parts[3], target, user, admin=True)
             return self.send_result(response)
-        if isinstance(app, WebApplication) and not target.path.startswith("/_auth/"):
+        if service and not target.path.startswith("/_auth/"):
             cookies = SimpleCookie(self.headers.get("Cookie", ""))
             session = cookies.get("dodo_session")
             user = identity.get_service_user(service, session.value if session else None)
-            return self.serve_web(app, service, target.path, target, user)
+            auth_pages = {"/login", "/signup", "/register", "/forgot-password"}
+            if not user and not (self.command in {"GET", "HEAD"} and target.path.rstrip("/") in auth_pages):
+                if self.command not in {"GET", "HEAD"} or target.path.startswith("/api/"):
+                    return self.send_result(Response.text("Sign in with an approved account.", 401))
+                query = urlencode({"service": service, "path": target.path + ("?" + target.query if target.query else "")})
+                return self.send_result(redirect(f"http://localhost:{PORT}/auth/authorize?{query}"))
+            if isinstance(app, WebApplication):
+                return self.serve_web(app, service, target.path, target, user)
         request = request_from_handler(self)
         if main:
             if request.path.startswith("/static/"):
-                response = workspace.dispatch(request)
-            elif request.path in {"/admin", "/admin/role", "/admin/password", "/account/password"}:
+                response = workspace_static(request)
+            elif request.path in {"/admin", "/admin/role", "/admin/password", "/admin/approve", "/account/password", "/account/email"}:
                 response = control_panel(request)
             else:
                 response = identity.handle_main(request)
@@ -252,10 +254,6 @@ def main():
     role = commands.add_parser("set-admin", help="Set a shared account's admin role")
     role.add_argument("username")
     role.add_argument("--remove", action="store_true")
-    link = commands.add_parser("link-profile", help="Link a legacy profile to a shared account")
-    link.add_argument("service", choices=("dodobook", "dodotv"))
-    link.add_argument("username")
-    link.add_argument("profile_id", type=int)
     commands.add_parser("seed-tv-demo", help="Generate the Dodo TV demo catalog")
     args = parser.parse_args()
     if args.command == "seed-tv-demo":
@@ -270,18 +268,6 @@ def main():
             print(f"{args.username}: {'member' if args.remove else 'administrator'}")
         except ValueError as error:
             parser.error(str(error))
-        return
-    if args.command == "link-profile":
-        with accounts.connect() as db:
-            account = db.execute("SELECT id FROM users WHERE username=?", (args.username,)).fetchone()
-        if not account:
-            parser.error("Unknown DodoStack account.")
-        app = service_apps[args.service]
-        with app.app_context():
-            try:
-                getattr(app, "profile_links", app.profile_loader).link(account["id"], args.profile_id)
-            except (ValueError, IntegrityError):
-                parser.error("Profile missing or already linked. Use an unlinked account and profile.")
         return
     server = ThreadingHTTPServer((os.environ.get("DODO_HOST", "127.0.0.1"), PORT), DodoHandler)
     print(f"DodoStack is running at http://localhost:{PORT}")

@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <link rel="icon" href="/static/facicon.ico">
+    <link rel="icon" href="/static/dodobook.png">
     <title>User Settings - Dodobook</title>
     <style>
         :root{--bg:#071428;--panel:#0b2742;--card:#0f3b61;--accent:#1e66b0;--muted:#234a6f;--text:#e6f2ff;--muted-text:#bcd4f2;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
@@ -47,16 +47,8 @@
 
             <form id="settingsForm">
                 <div class="form-section">
-                    <div class="section-title">Account Information</div>
-                    <label for="username">Username</label>
-                    <input id="username" name="username" placeholder="username" value="{{ current_user.username }}" required>
-
-                    <label for="email" style="margin-top:12px">Email</label>
-                    <input id="email" name="email" type="email" placeholder="you@example.com" value="{{ current_user.email }}" required>
-                </div>
-
-                <div class="form-section">
-                    <a href="{{ workspace_url }}/account/password">Change your DodoStack password</a>
+                    <label for="username">DodoBook username</label>
+                    <input id="username" name="username" value="{{ current_user.username }}" maxlength="50" required>
                 </div>
 
                 <div class="form-section">
@@ -82,7 +74,7 @@
                     <div class="actions-row">
                         <button type="submit" class="pill">Save Changes</button>
                         <button type="button" class="pill pill-secondary" onclick="location.href='/'">Cancel</button>
-                        <button type="button" class="pill pill-danger" onclick="confirmDelete()">Delete Account</button>
+                        <button type="button" class="pill pill-danger" onclick="confirmDelete()">Delete DodoBook profile</button>
                     </div>
                 </div>
             </form>
@@ -101,12 +93,12 @@
         }
 
         function confirmDelete() {
-            if (confirm('Are you sure you want to delete your account? This cannot be undone.')) {
+            if (confirm('Are you sure you want to delete your DodoBook profile? This cannot be undone.')) {
                 fetch('/api/user/delete', { method: 'DELETE' })
                     .then(r => r.json())
                     .then(data => {
-                        if (data.success) location.href = '/login';
-                        else alert('Error deleting account.');
+                        if (data.success) location.href = '{{ workspace_url }}/';
+                        else alert('Error deleting DodoBook profile.');
                     });
             }
         }

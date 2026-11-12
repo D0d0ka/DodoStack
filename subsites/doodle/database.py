@@ -95,8 +95,6 @@ def init_db():
         )
     ''')
 
-    _ensure_pages_columns(conn)
-    
     # FTS5 virtual table for fast full-text search
     try:
         cursor.execute('''
@@ -182,20 +180,6 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_pages_title_content ON pages(title, content)')
     conn.commit()
     conn.close()
-
-
-def _ensure_pages_columns(conn: sqlite3.Connection) -> None:
-    existing = {row['name'] for row in conn.execute('PRAGMA table_info(pages)').fetchall()}
-    required = {
-        'canonical_url': 'TEXT',
-        'content_hash': 'TEXT',
-        'domain': 'TEXT',
-        'language': 'TEXT',
-        'content_type': 'TEXT',
-    }
-    for col, col_type in required.items():
-        if col not in existing:
-            conn.execute(f'ALTER TABLE pages ADD COLUMN {col} {col_type}')
 
 
 def upsert_page(url: str, title: str, content: str) -> int | None:

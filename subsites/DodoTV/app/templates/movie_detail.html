@@ -24,6 +24,7 @@
         {% if movie.genres %}<span class="dot"></span><span>{{ movie.genres|map(attribute='name')|join(' · ') }}</span>{% endif %}
         {% if not movie.published %}<span class="dot"></span><span class="badge-draft">DRAFT</span>{% endif %}
       </div>
+      {% if movie.creator %}<p class="detail-desc">Created by {{ movie.creator }}</p>{% endif %}
       {% if movie.description %}<p class="detail-desc">{{ movie.description }}</p>{% endif %}
       {% if movie.genres %}
       <div class="detail-genres">

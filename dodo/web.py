@@ -84,6 +84,7 @@ class AdminTab:
     endpoints: frozenset[str]
     prefixes: tuple[str, ...]
     assets: frozenset[str]
+    on_service: bool
 
 
 class WebApplication(Blueprint):
@@ -128,9 +129,9 @@ class WebApplication(Blueprint):
         for path, methods, endpoint, view in blueprint.routes:
             self.add_rule(blueprint.url_prefix + path, methods, f"{blueprint.name}.{endpoint}", view)
 
-    def admin_tab(self, label, entry, *, endpoints=(), prefixes=(), assets=()):
+    def admin_tab(self, label, entry, *, endpoints=(), prefixes=(), assets=(), on_service=False):
         """Register a tab and route its endpoints through the central admin gate."""
-        self.admin = AdminTab(label, entry, frozenset(endpoints), tuple(prefixes), frozenset(assets))
+        self.admin = AdminTab(label, entry, frozenset(endpoints), tuple(prefixes), frozenset(assets), on_service)
 
     def is_admin_endpoint(self, endpoint):
         return bool(self.admin and (endpoint in self.admin.endpoints or endpoint.startswith(self.admin.prefixes)))
@@ -199,9 +200,12 @@ class WebApplication(Blueprint):
                 try:
                     endpoint, values = incoming.adapter.match(path, method=incoming.method)
                     incoming.endpoint = endpoint
-                    if self.is_admin_endpoint(endpoint) != admin:
-                        if not (admin and self.is_admin_asset(endpoint) and incoming.method in {"GET", "HEAD"}):
-                            return Response("Not found", status=404)(environ, start_response)
+                    admin_endpoint = self.is_admin_endpoint(endpoint)
+                    admin_asset = self.is_admin_asset(endpoint) and incoming.method in {"GET", "HEAD"}
+                    if admin and not (admin_endpoint or admin_asset):
+                        return Response("Not found", status=404)(environ, start_response)
+                    if not admin and admin_endpoint and not self.admin.on_service:
+                        return Response("Not found", status=404)(environ, start_response)
                     if not same_origin(incoming):
                         raise Forbidden()
                     if user and self.profile_loader:
@@ -265,7 +269,9 @@ def url_for(endpoint, **values):
         endpoint = request.endpoint.split(".")[0] + endpoint
     path = request.adapter.build(endpoint, values)
     origin = f"http://localhost:{request.identity.port}"
-    if current_app.is_admin_endpoint(endpoint) or (request.admin_mount and current_app.is_admin_asset(endpoint)):
+    admin_endpoint = current_app.is_admin_endpoint(endpoint)
+    if ((admin_endpoint and (request.admin_mount or not current_app.admin.on_service))
+            or (request.admin_mount and current_app.is_admin_asset(endpoint))):
         result = f"/admin/{request.service}{path}"
         result = origin + result if external or not request.admin_mount else result
     else:

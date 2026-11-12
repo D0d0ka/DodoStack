@@ -1,7 +1,6 @@
 """WTForms definitions for authentication and admin workflows."""
 from __future__ import annotations
 
-import re
 from datetime import datetime
 
 from dodo.web import WebForm
@@ -18,7 +17,6 @@ from wtforms import (
 )
 from wtforms.validators import (
     DataRequired,
-    Email,
     Length,
     NumberRange,
     Optional,
@@ -59,23 +57,9 @@ SUBTITLE_LANGUAGES = [
     ("zh", "Chinese"),
 ]
 
-USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
-
-
-class ProfileForm(WebForm):
-    username = StringField(
-        "Username",
-        validators=[
-            DataRequired(),
-            Length(min=3, max=32),
-            Regexp(USERNAME_RE, message="Use letters, numbers, dots, hyphens and underscores only."),
-        ],
-    )
-    email = StringField("Email", validators=[DataRequired(), Email(), Length(max=255)])
-
-
 class MovieForm(WebForm):
     title = StringField("Title", validators=[DataRequired(), Length(max=255)])
+    creator = StringField("Creator or production company", validators=[Optional(), Length(max=255)])
     description = TextAreaField("Description", validators=[Optional(), Length(max=8000)])
     release_year = IntegerField(
         "Release year",
@@ -95,6 +79,7 @@ class MovieForm(WebForm):
 
 class ShowForm(WebForm):
     title = StringField("Show title", validators=[DataRequired(), Length(max=255)])
+    creator = StringField("Creator or production company", validators=[Optional(), Length(max=255)])
     description = TextAreaField("Show description", validators=[Optional(), Length(max=8000)])
     release_year = IntegerField(
         "Release year", validators=[Optional(), NumberRange(min=1888, max=2100)]

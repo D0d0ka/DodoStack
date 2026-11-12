@@ -844,12 +844,6 @@ def ai_generate():
 
 # ------------------------------------------------------------------ /admin
 
-@app.get('/api/admin/session')
-@_require_admin
-def admin_session():
-    return jsonify({'success': True, 'authenticated': True})
-
-
 @app.get('/api/admin/settings')
 @_require_admin
 def get_admin_settings():
@@ -862,15 +856,10 @@ def get_admin_settings():
 def update_admin_settings():
     data = _json_body()
     settings = _load_settings()
-    if 'ai_model' in data:
-        ai_model = _text_field(data, 'ai_model')
-        if ai_model:
-            settings['ai_model'] = ai_model
-    if 'new_password' in data:
-        new_password = _text_field(data, 'new_password')
-        if len(new_password) < 4:
-            return jsonify({'success': False, 'message': 'Password must be at least 4 characters'}), 400
-        settings['admin_password_hash'] = generate_password_hash(new_password)
+    ai_model = _text_field(data, 'ai_model')
+    if not ai_model or len(ai_model) > 100:
+        return jsonify({'success': False, 'message': 'Enter an AI model name of up to 100 characters.'}), 400
+    settings['ai_model'] = ai_model
     _save_settings(settings)
     return jsonify({'success': True, 'message': 'Settings saved'})
 

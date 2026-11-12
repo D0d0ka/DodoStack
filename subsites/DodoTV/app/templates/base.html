@@ -49,10 +49,9 @@
                 <span class="avatar avatar-lg">{{ current_user.initial }}</span>
                 <div>
                   <strong>{{ current_user.username }}</strong>
-                  <span>{{ current_user.email }}</span>
                 </div>
               </div>
-              <a href="{{ url_for('auth.profile') }}">Profile & settings</a>
+              <a href="{{ url_for('auth.profile') }}">Viewing activity</a>
               <a href="{{ url_for('auth.history') }}">Watch history</a>
               <a href="{{ url_for('main.browse') }}?type=movie">Browse movies</a>
               
@@ -102,7 +101,7 @@
         <div>
           <h2>Account</h2>
           {% if current_user.is_authenticated %}
-            <a href="{{ url_for('auth.profile') }}">Profile</a>
+            <a href="{{ url_for('auth.profile') }}">Viewing activity</a>
             <a href="{{ url_for('auth.history') }}">Watch history</a>
           {% else %}
             <a href="{{ url_for('auth.login') }}">Sign in</a>

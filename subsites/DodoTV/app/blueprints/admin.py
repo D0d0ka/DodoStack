@@ -98,6 +98,7 @@ def _genres_from_ids(ids: list[int]) -> list[Genre]:
 
 def _populate_movie(movie: Movie, form: MovieForm) -> None:
     movie.title = form.title.data.strip()
+    movie.creator = (form.creator.data or "").strip()
     movie.description = (form.description.data or "").strip()
     movie.release_year = form.release_year.data
     movie.age_rating = form.age_rating.data
@@ -111,6 +112,7 @@ def _populate_movie(movie: Movie, form: MovieForm) -> None:
 
 def _populate_show(show: TVShow, form: ShowForm) -> None:
     show.title = form.title.data.strip()
+    show.creator = (form.creator.data or "").strip()
     show.description = (form.description.data or "").strip()
     show.release_year = form.release_year.data
     show.age_rating = form.age_rating.data

@@ -7,11 +7,12 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import re
 import secrets
 import sqlite3
 import time
+
+from email_validator import EmailNotValidError, validate_email
 
 from .framework import Request, Response, redirect
 from . import pages
@@ -24,10 +25,20 @@ def local_path(path: str) -> str:
     return quote(path, safe="/%?&=;:+,~@!$'()*")
 
 
+def normalized_email(value: str) -> str:
+    try:
+        return validate_email(value.strip(), check_deliverability=False).normalized
+    except EmailNotValidError as error:
+        raise ValueError("Enter a valid email address.") from error
+
+
 class AccountStore:
-    def __init__(self, database: str | Path, secret: str):
+    def __init__(self, database: str | Path, secret: str, *, min_password_length=8):
         self.path = Path(database)
         self.secret = secret.encode()
+        if not 1 <= min_password_length <= 255:
+            raise ValueError("DODO_MIN_PASSWORD_LENGTH must be between 1 and 255.")
+        self.min_password_length = min_password_length
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -35,17 +46,13 @@ class AccountStore:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL COLLATE NOCASE UNIQUE,
                 password_hash TEXT NOT NULL,
-                session_version INTEGER NOT NULL DEFAULT 0,
+                session_version INTEGER NOT NULL,
                 is_admin INTEGER NOT NULL DEFAULT 0,
+                email TEXT NOT NULL,
+                approved INTEGER NOT NULL DEFAULT 1,
                 password_reset_requested INTEGER NOT NULL DEFAULT 0,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
-            columns = {row[1] for row in db.execute("PRAGMA table_info(users)")}
-            if "is_admin" not in columns:
-                db.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
-            if "password_reset_requested" not in columns:
-                db.execute("ALTER TABLE users ADD COLUMN password_reset_requested INTEGER NOT NULL DEFAULT 0")
-            if "session_version" not in columns:
-                db.execute("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
+            db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users(lower(email))")
 
     def connect(self):
         db = sqlite3.connect(self.path)
@@ -62,32 +69,49 @@ class AccountStore:
 
     @staticmethod
     def verify_password(password: str, encoded: str) -> bool:
-        if encoded.startswith("pbkdf2_sha256$"):
-            try:
-                _, rounds, salt, expected = encoded.split("$", 3)
-                decode = lambda value: base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
-                actual = hashlib.pbkdf2_hmac("sha256", password.encode(), decode(salt), int(rounds))
-                return hmac.compare_digest(actual, decode(expected))
-            except (ValueError, TypeError):
-                return False
-        # Preserve existing Flask/Werkzeug password hashes during account migration.
+        if not encoded.startswith("pbkdf2_sha256$"):
+            return False
         try:
-            from werkzeug.security import check_password_hash
-            return check_password_hash(encoded, password)
-        except ImportError:
+            _, rounds, salt, expected = encoded.split("$", 3)
+
+            def decode(value):
+                return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+            actual = hashlib.pbkdf2_hmac("sha256", password.encode(), decode(salt), int(rounds))
+            return hmac.compare_digest(actual, decode(expected))
+        except (ValueError, TypeError):
             return False
 
-    def authenticate(self, username: str, password: str):
+    def authenticate(self, identifier: str, password: str):
+        if "@" in identifier:
+            try:
+                identifier = normalized_email(identifier)
+            except ValueError:
+                return None
+            lookup = "lower(email)=lower(?)"
+        else:
+            lookup = "username=?"
         with self.connect() as db:
-            user = db.execute("SELECT id, username, password_hash FROM users WHERE username=? COLLATE NOCASE", (username,)).fetchone()
+            user = db.execute(
+                "SELECT id, username, password_hash FROM users WHERE " + lookup, (identifier,),
+            ).fetchone()
         if user and self.verify_password(password, user["password_hash"]):
             return {"id": user["id"], "username": user["username"]}
         return None
 
+    def account_id_by_email(self, email: str):
+        try:
+            email = normalized_email(email)
+        except ValueError:
+            return None
+        with self.connect() as db:
+            row = db.execute("SELECT id FROM users WHERE lower(email)=lower(?)", (email,)).fetchone()
+        return row["id"] if row else None
+
     def account(self, user_id):
         with self.connect() as db:
-            row = db.execute("SELECT id, username, is_admin FROM users WHERE id=?", (user_id,)).fetchone()
-        return {**row, "is_admin": bool(row["is_admin"])} if row else None
+            row = db.execute("SELECT id, username, email, is_admin, approved FROM users WHERE id=?", (user_id,)).fetchone()
+        return {**row, "is_admin": bool(row["is_admin"]), "approved": bool(row["approved"])} if row else None
 
     def set_admin(self, username, enabled):
         with self.connect() as db:
@@ -99,19 +123,25 @@ class AccountStore:
                 "SELECT COUNT(*) FROM users WHERE is_admin=1"
             ).fetchone()[0] == 1:
                 raise ValueError("Keep at least one administrator.")
-            db.execute("UPDATE users SET is_admin=? WHERE id=?", (enabled, user["id"]))
+            if enabled:
+                db.execute("UPDATE users SET is_admin=1, approved=1 WHERE id=?", (user["id"],))
+            else:
+                db.execute("UPDATE users SET is_admin=0 WHERE id=?", (user["id"],))
 
     def list_accounts(self):
         with self.connect() as db:
-            return db.execute("SELECT username, is_admin, password_reset_requested FROM users ORDER BY username").fetchall()
+            return db.execute("SELECT username, email, is_admin, approved, password_reset_requested FROM users ORDER BY approved, username").fetchall()
 
     def request_password_reset(self, username):
         with self.connect() as db:
             db.execute("UPDATE users SET password_reset_requested=1 WHERE username=?", (username,))
 
+    def validate_password(self, password):
+        if not self.min_password_length <= len(password) <= 255:
+            raise ValueError(f"Use a password between {self.min_password_length} and 255 characters.")
+
     def reset_password(self, username, password):
-        if not 8 <= len(password) <= 255:
-            raise ValueError("Use a password between 8 and 255 characters.")
+        self.validate_password(password)
         with self.connect() as db:
             db.execute(
                 "UPDATE users SET password_hash=?, session_version=session_version+1, password_reset_requested=0 WHERE username=?",
@@ -134,10 +164,23 @@ class AccountStore:
         with self.connect() as db:
             db.execute("UPDATE users SET session_version=session_version+1 WHERE id=?", (user_id,))
 
-    def register(self, username: str, password: str):
+    def set_email(self, user_id: int, email: str):
         with self.connect() as db:
-            cursor = db.execute("INSERT INTO users(username,password_hash) VALUES (?,?)", (username, self.hash_password(password)))
-            return {"id": cursor.lastrowid, "username": username}
+            db.execute("UPDATE users SET email=? WHERE id=?", (normalized_email(email), user_id))
+
+    def approve(self, username: str):
+        with self.connect() as db:
+            db.execute("UPDATE users SET approved=1 WHERE username=?", (username,))
+
+    def register(self, username: str, password: str, email: str, *, approved: bool):
+        self.validate_password(password)
+        email = normalized_email(email)
+        with self.connect() as db:
+            cursor = db.execute(
+                "INSERT INTO users(username,password_hash,email,approved,session_version) VALUES (?,?,?,?,?)",
+                (username, self.hash_password(password), email, approved, secrets.randbits(52)),
+            )
+            return {"id": cursor.lastrowid, "username": username, "email": email, "approved": approved}
 
     def issue(self, payload: dict) -> str:
         encoded = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
@@ -170,8 +213,9 @@ class AccountStore:
 
 
 class Identity:
-    def __init__(self, accounts: AccountStore, services: dict[str, str], port: int):
+    def __init__(self, accounts: AccountStore, services: dict[str, str], port: int, *, private=False):
         self.accounts, self.services, self.port = accounts, services, port
+        self.private = private
         self.main_session = "dodo_main_session"
 
     def main_user(self, request: Request):
@@ -180,11 +224,20 @@ class Identity:
     def get_service_user(self, service: str, token: str | None):
         return self.session_user(token, service)
 
+    @staticmethod
+    def account_destination(user):
+        if not user["approved"]:
+            return "/account/pending"
+        return None
+
     def session_user(self, token: str | None, audience: str):
         payload = self.accounts.read_claims(token, audience)
         if not payload or not self.accounts.is_current(payload):
             return None
-        return self.accounts.account(int(payload["sub"]))
+        user = self.accounts.account(int(payload["sub"]))
+        if user and (audience == "server" or not self.account_destination(user)):
+            return user
+        return None
 
     def issue_assertion(self, source_service: str, target_service: str, user: dict, claims: dict | None = None, ttl: int = 60):
         """Create a brief signed user assertion for a trusted service call."""
@@ -198,7 +251,10 @@ class Identity:
         payload = self.accounts.read_claims(token, target_service)
         if not payload or payload.get("iss") != source_service or not self.accounts.is_current(payload):
             return None
-        return {"user": {"id": int(payload["sub"]), "username": payload["name"]},
+        user = self.accounts.account(int(payload["sub"]))
+        if not user or self.account_destination(user):
+            return None
+        return {"user": {"id": user["id"], "username": user["username"]},
                 "claims": payload.get("claims", {})}
 
     def service_url(self, service: str, path: str = "/"):
@@ -227,6 +283,9 @@ class Identity:
                 return self.sign_in_problem(
                     service, "This sign-in link has expired. Start again from the service.", 400,
                 )
+            user = self.accounts.account(int(ticket["sub"]))
+            if not user or self.account_destination(user):
+                return redirect(f"http://localhost:{self.port}/")
             lifetime = 12 * 3600
             session = self.accounts.issue({
                 "sub": ticket["sub"], "name": ticket["name"], "aud": service,
@@ -249,6 +308,18 @@ class Identity:
     def handle_main(self, request: Request):
         user = self.main_user(request)
         path = request.path
+        if user and path != "/logout":
+            destination = self.account_destination(user)
+            if destination and path != destination:
+                return redirect(destination)
+        if path == "/account/pending":
+            if not user:
+                return redirect("/login")
+            if user["approved"]:
+                return redirect("/")
+            response = Response.html(pages.pending_page())
+            response.headers["Cache-Control"] = "no-store"
+            return response
         if path == "/auth/authorize":
             service, target = request.value("service"), request.value("path", "/")
             if service not in self.services:
@@ -257,7 +328,7 @@ class Identity:
                 target = "/"
             if user:
                 return self._issue_ticket(service, user, target)
-            return Response.html(pages.auth_page("login", service=service, target=target))
+            return self.auth_form("login", service, target)
         if path == "/forgot-password":
             submitted = request.method == "POST"
             if submitted:
@@ -267,34 +338,42 @@ class Identity:
             mode = "signup" if path == "/signup" else "login"
             service, target = request.value("service"), request.value("path", "/")
             if request.method == "POST":
-                username, password = request.value("username").strip(), request.value("password")
+                fields = {key: request.form.get(key, [""])[0] for key in
+                          ("username", "email", "password", "password_confirmation")}
+                username, password = fields["username"].strip(), fields["password"]
                 if mode == "signup":
-                    confirmation = request.value("password_confirmation")
+                    confirmation = fields["password_confirmation"]
                     if not re.fullmatch(r"[A-Za-z0-9_]{3,24}", username):
                         error = "Choose a username with 3–24 letters, numbers, or underscores."
-                    elif len(password) < 8:
-                        error = "Your password must be at least 8 characters long."
                     elif password != confirmation:
                         error = "Your passwords do not match."
                     else:
                         try:
-                            user = self.accounts.register(username, password)
+                            user = self.accounts.register(
+                                username, password, fields["email"], approved=not self.private,
+                            )
                             error = None
+                        except ValueError as exc:
+                            error = str(exc)
                         except sqlite3.IntegrityError:
-                            error = "That username is already taken. Try another one."
+                            error = "That username or email is already in use."
                 else:
-                    user = self.accounts.authenticate(username, password)
-                    error = None if user else "The username or password is incorrect."
+                    authenticated = self.accounts.authenticate(username, password)
+                    user = self.accounts.account(authenticated["id"]) if authenticated else None
+                    error = None if user else "The username, email or password is incorrect."
                 if not error:
                     version = self.accounts.session_version(user["id"])
                     request.set_cookie(self.main_session, self.accounts.issue({"sub": user["id"], "name": user["username"], "aud": "server", "ver": version, "exp": int(time.time()) + 30 * 86400}), max_age=30 * 86400)
+                    destination = self.account_destination(user)
+                    if destination:
+                        return redirect(destination)
                     if service in self.services:
                         return self._issue_ticket(service, user, target)
                     return redirect("/")
-                return Response.html(pages.auth_page(mode, error=error, service=service, target=target))
+                return self.auth_form(mode, service, target, error=error, fields=fields)
             if user:
                 return self._issue_ticket(service, user, target) if service in self.services else redirect("/")
-            return Response.html(pages.auth_page(mode, service=service, target=target))
+            return self.auth_form(mode, service, target)
         if path == "/logout":
             if user:
                 self.accounts.revoke_sessions(user["id"])
@@ -307,8 +386,16 @@ class Identity:
                 response = redirect("/")
             return response
         if path == "/":
-            return Response.html(pages.dashboard(user, {key: self.service_url(key) for key in self.services}, request.value("service")))
+            return Response.html(pages.dashboard(user, {key: self.service_url(key) for key in self.services}, request.value("service"), private=self.private))
         return Response.text("Not found", 404)
+
+    def auth_form(self, mode, service, target, **values):
+        response = Response.html(pages.auth_page(
+            mode, service=service, target=target, private=self.private,
+            min_password_length=self.accounts.min_password_length, **values,
+        ))
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     def _issue_ticket(self, service, user, target):
         ticket = self.accounts.issue({

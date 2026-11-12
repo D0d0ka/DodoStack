@@ -24,36 +24,34 @@ python server.py
 
 Dodo TV uses FFmpeg and FFprobe for video uploads, validation, and preview frames. Doodle's optional AI answers require a local Ollama instance. Set `DODO_PORT` to change the port.
 
+## Sign-in and server settings
+
+All services require a DodoStack account. Sign in with your username or email address. The root `.env` configures DodoStack. Copy `.env.example` if needed, and restart after changing settings.
+
+- `DODO_MIN_PASSWORD_LENGTH` sets the minimum length for new and changed passwords. The default is 8.
+- `DODO_PRIVATE=true` requires workspace approval for new accounts. Approve them in **Admin → Accounts**.
+
 ## Administrators
 
-Register a shared account in the workspace. From the terminal, grant the first account administrator access:
+Register a shared account in the workspace. Grant the first account administrator access from the terminal.
 
 ```bash
 python server.py set-admin YOUR_USERNAME
 ```
 
-Open **Admin** in the workspace. The **Accounts** tab manages shared roles and password resets. The other tabs contain Doodle's crawler and search settings, DodoBook's moderation and profile tools, and Dodo TV's catalog, uploads, profiles, and settings. DodoBook group ownership stays part of the group itself.
+The workspace **Admin** tabs manage shared accounts, Doodle, DodoBook, and Dodo TV. In DodoBook, open **Moderation** from the user menu. DodoBook administrators can manage other members' DodoBook roles and delete posts and comments. Moderators can delete posts and comments they can see. DodoBook roles apply within DodoBook. DodoBook uses the shared email address and keeps its username, bio, and picture in the service profile.
 
-DodoBook still requires approval for new member profiles. Dodo TV can restrict creation of new service profiles through its settings. These policies govern access to each service.
+## Local databases
 
-## Existing data
+DodoStack creates databases from the current schema. The shared account, DodoBook, Doodle, and Dodo TV databases are initialized on startup. Todo initializes its task database on first use.
 
-Todo imports legacy Todo accounts on first startup and keeps its task database. For the other services, back up the source data and place a copy under the corresponding directory before first use. Keep the original IDs and directory layout:
-
-| Service | Data paths relative to the project root |
+| Database | Path relative to the project root |
 | --- | --- |
-| Doodle | `subsites/doodle/doodle.db` and optional `subsites/doodle/settings.json` |
-| DodoBook | `subsites/dodobook/instance/dodobook.db` and `subsites/dodobook/static/uploads/` |
-| Dodo TV | `subsites/DodoTV/instance/dodotv.db` and `subsites/DodoTV/uploads/` |
-
-To attach an existing DodoBook or Dodo TV profile, first create the shared account in DodoStack. Run the appropriate command before the user opens that service for the first time. Use the local profile's numeric ID from the legacy database (`user` in DodoBook and `users` in Dodo TV).
-
-```bash
-python server.py link-profile dodobook YOUR_USERNAME 42
-python server.py link-profile dodotv YOUR_USERNAME 17
-```
-
-A link preserves the old profile and its content, history, and relationships. Legacy passwords and administrator flags for these two services do not grant access to a shared account. Shared roles are assigned from DodoStack.
+| Shared accounts | `instance/accounts.sqlite3` |
+| Todo | `subsites/todo/instance/todos.sqlite3` |
+| Doodle | `subsites/doodle/doodle.db` |
+| DodoBook | `subsites/dodobook/instance/dodobook.db` |
+| Dodo TV | `subsites/DodoTV/instance/dodotv.db` |
 
 ## Add a service and admin tab
 
@@ -72,6 +70,6 @@ def management():
 app.admin_tab("Example", "/management", endpoints=("management",))
 ```
 
-The tab and its routes appear automatically under `/admin/<service>` on the main server. Add admin actions to `endpoints` or use `prefixes=("admin.",)` for a whole admin blueprint. Use `assets` for explicitly allowed read-only dependencies such as stylesheets and media previews. Use `url_for()` for links and form actions, and include `{{ admin_navigation }}` in the service's admin template to show the shared tabs. The framework checks the current shared admin role and closes admin routes on the public service hostname.
+The tab and its routes appear automatically under `/admin/<service>` on the main server. Add admin actions to `endpoints` or use `prefixes=("admin.",)` for a whole admin blueprint. Use `assets` for explicitly allowed read-only dependencies such as stylesheets and media previews. Use `url_for()` for links and form actions, and include `{{ admin_navigation }}` in the service's admin template to show the shared tabs. Use `admin_only` to require the shared admin role. If a service explicitly exposes admin endpoints on its own hostname with `on_service=True`, its handlers must check the service roles.
 
 Public routes can use `require_login` and a service profile loader with the shared account. `Identity.issue_assertion()` and `verify_assertion()` are available for short-lived, service-scoped calls.

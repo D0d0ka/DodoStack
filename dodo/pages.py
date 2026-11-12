@@ -16,7 +16,12 @@ def service_name(key):
     return SERVICE_NAMES.get(key, key.title())
 
 
-def document(title, body, origin=""):
+def brand_logo(service, css_class="service-logo"):
+    name = service if service in SERVICE_NAMES else "stack"
+    return f'<img class="{css_class}" src="/static/branding/{name}.png" alt="" width="52" height="52">'
+
+
+def document(title, body, origin="", icon="stack"):
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -24,6 +29,7 @@ def document(title, body, origin=""):
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f6ee">
   <title>{safe(title)} · DodoStack</title>
+  <link rel="icon" type="image/png" href="{safe(origin)}/static/branding/{safe(icon)}.png">
   <link rel="stylesheet" href="{safe(origin)}/static/workspace.css">
 </head>
 <body>{body}</body>
@@ -35,7 +41,7 @@ def header(account="", origin=""):
 <header class="site-header">
   <div class="header-inner">
     <a class="wordmark" href="{safe(origin)}/">
-      <img src="{safe(origin)}/static/dodo.png" width="38" height="38" alt="">
+      <img src="{safe(origin)}/static/branding/stack.png" width="38" height="38" alt="">
       <span>Dodo<span>Stack</span></span>
     </a>
     {account}
@@ -43,11 +49,13 @@ def header(account="", origin=""):
 </header>"""
 
 
-def dashboard(user, services, selected):
+def dashboard(user, services, selected, *, private=False):
+    if private and not user:
+        services = {}
     selected = selected if selected in services else ""
     if user:
         account = f"""<div class="account">
-  <a class="username" href="/account/password">{safe(user["username"])}</a>
+  <a class="username" href="/account/email">{safe(user["username"])}</a>
   {'<a class="button primary" href="/admin">Admin</a>' if user["is_admin"] else ''}
   <form action="/logout" method="post"><button class="button" type="submit">Sign out</button></form>
 </div>"""
@@ -65,7 +73,7 @@ def dashboard(user, services, selected):
         tabs.append(nav_link(name, tab_url, selected == service))
         cards.append(f"""
 <a class="service-card" href="{safe(tab_url)}">
-  <span class="service-icon" aria-hidden="true">{'✓' if service == 'todo' else '↗'}</span>
+  {brand_logo(service)}
   <div><h3>{name}</h3><p>{safe(SERVICE_DESCRIPTIONS.get(service, 'Open this service with your Dodo account.'))}</p></div>
   <span class="arrow" aria-hidden="true">→</span>
 </a>""")
@@ -76,30 +84,36 @@ def dashboard(user, services, selected):
         url = safe(services[selected])
         content = f"""
 <section class="service-detail">
-  <span class="service-icon" aria-hidden="true">{'✓' if selected == 'todo' else '↗'}</span>
+  {brand_logo(selected)}
   <h1>{name}</h1>
   <p>{description}</p>
   <a class="button primary" href="{url}">Open {name} <span aria-hidden="true">↗</span></a>
 </section>"""
     else:
-        content = f"""
-<section class="hero">
-  <div>
-    <h1>Your Dodo<br>workspace</h1>
-    <p>One account for all your Dodo services.</p>
-  </div>
-  <img src="/static/dodo.png" width="190" height="190" alt="">
-</section>
+        service_list = ""
+        if cards:
+            service_list = f"""
 <section class="services" aria-labelledby="services-heading">
   <h2 id="services-heading">Your services</h2>
   <div class="service-grid">{''.join(cards)}</div>
 </section>"""
+        intro = ("Sign in with an approved account to open the services."
+                 if private and not user else "One account for all your Dodo services.")
+        content = f"""
+<section class="hero">
+  <div>
+    <h1>Your Dodo<br>workspace</h1>
+    <p>{intro}</p>
+  </div>
+  <img src="/static/dodo.png" width="190" height="190" alt="">
+</section>
+{service_list}"""
     return document("Workspace", f"""
 {header(account)}
 <main class="workspace">
   <nav class="tabs" aria-label="Workspace">{''.join(tabs)}</nav>
   {content}
-</main>""")
+</main>""", icon=selected if selected in SERVICE_NAMES else "stack")
 
 
 def nav_link(label, url, current):
@@ -107,16 +121,25 @@ def nav_link(label, url, current):
     return f'<a href="{safe(url)}"{active}>{label}</a>'
 
 
-def auth_page(mode, error=None, service=None, target="/"):
+def auth_page(mode, error=None, service=None, target="/", *, private=False,
+              min_password_length=8, fields=None):
+    fields = fields or {}
     signup = mode == "signup"
     title = "Create your account" if signup else "Sign in"
     other = "login" if signup else "signup"
     other_url = f"/{other}?" + urlencode({"service": service or "", "path": target})
     password_type = "new-password" if signup else "current-password"
-    confirmation = """
+    confirmation = f"""
 <label for="confirmation">Confirm password</label>
 <input id="confirmation" name="password_confirmation" type="password"
-       autocomplete="new-password" minlength="8" required>""" if signup else ""
+       autocomplete="new-password" minlength="{min_password_length}" maxlength="255"
+       value="{safe(fields.get('password_confirmation', ''))}" required>""" if signup else ""
+    email = f"""
+<label for="email">Email address</label>
+<input id="email" name="email" type="email" autocomplete="email" maxlength="254"
+       value="{safe(fields.get('email', ''))}" required>""" if signup else ""
+    password_limits = f'minlength="{min_password_length}" maxlength="255"' if signup else 'maxlength="255"'
+    approval_note = '<p>New accounts need approval from a DodoStack administrator.</p>' if signup and private else ""
     alert = f'<p class="error" role="alert">{safe(error)}</p>' if error else ""
     return document(title, f"""
 {header()}
@@ -125,14 +148,18 @@ def auth_page(mode, error=None, service=None, target="/"):
   <section class="auth-card">
     <h1>{title}</h1>
     <p>{f'Continue to {safe(service_name(service))} with your Dodo account.' if service else 'One account for all your Dodo services.'}</p>
+    {approval_note}
     {alert}
     <form method="post" action="/{mode}">
       <input type="hidden" name="service" value="{safe(service or '')}">
       <input type="hidden" name="path" value="{safe(target)}">
-      <label for="username">Username</label>
-      <input id="username" name="username" autocomplete="username" minlength="3" maxlength="24" required>
+      <label for="username">{'Username' if signup else 'Username or email'}</label>
+      <input id="username" name="username" autocomplete="username" {'minlength="3" maxlength="24"' if signup else 'maxlength="254"'}
+             value="{safe(fields.get('username', ''))}" required>
+      {email}
       <label for="password">Password</label>
-      <input id="password" name="password" type="password" autocomplete="{password_type}" minlength="8" required>
+      <input id="password" name="password" type="password" autocomplete="{password_type}" {password_limits}
+             value="{safe(fields.get('password', ''))}" required>
       {confirmation}
       <button class="button primary" type="submit">{title}</button>
     </form>
@@ -166,16 +193,24 @@ def admin_navigation(tabs, selected=""):
 </nav>"""
 
 
-def admin_accounts(accounts, tabs, token, message=""):
+def admin_accounts(accounts, tabs, token, message="", *, min_password_length=8):
     rows = []
     for account in accounts:
         username = safe(account["username"])
         role = "Administrator" if account["is_admin"] else "Member"
         action = "Remove admin" if account["is_admin"] else "Make admin"
         enabled = 0 if account["is_admin"] else 1
+        approval = f"""
+<form method="post" action="/admin/approve">
+  <input type="hidden" name="csrf" value="{token}">
+  <input type="hidden" name="username" value="{username}">
+  <button class="button primary" type="submit">Approve account</button>
+</form>""" if not account["approved"] else ""
         rows.append(f"""
 <section class="service-detail account-row">
-  <h2>{username}</h2><p>{role}</p>
+  <h2>{username}</h2><p>{role} · {'Approved' if account["approved"] else 'Awaiting approval'}</p>
+  <p>{safe(account["email"] or "Email required")}</p>
+  {approval}
   {'<p role="status">Password reset requested</p>' if account["password_reset_requested"] else ''}
   <form method="post" action="/admin/role">
     <input type="hidden" name="csrf" value="{token}">
@@ -186,7 +221,7 @@ def admin_accounts(accounts, tabs, token, message=""):
     <input type="hidden" name="csrf" value="{token}">
     <input type="hidden" name="username" value="{username}">
     <label>New password for {username}
-      <input type="password" name="password" autocomplete="new-password" minlength="8" maxlength="255" required>
+      <input type="password" name="password" autocomplete="new-password" minlength="{min_password_length}" maxlength="255" required>
     </label>
     <button class="button" type="submit">Reset password</button>
   </form>
@@ -201,7 +236,7 @@ def admin_accounts(accounts, tabs, token, message=""):
 </main>""")
 
 
-def password_page(token, message=""):
+def password_page(token, message="", *, min_password_length=8):
     alert = f'<p role="status">{safe(message)}</p>' if message else ""
     return document("Change password", f"""
 {header()}
@@ -214,7 +249,7 @@ def password_page(token, message=""):
       <label for="current-password">Current password</label>
       <input id="current-password" type="password" name="current" autocomplete="current-password" required>
       <label for="new-password">New password</label>
-      <input id="new-password" type="password" name="password" autocomplete="new-password" minlength="8" maxlength="255" required>
+      <input id="new-password" type="password" name="password" autocomplete="new-password" minlength="{min_password_length}" maxlength="255" required>
       <button class="button primary" type="submit">Change password</button>
     </form>
   </section>
@@ -239,5 +274,41 @@ def reset_request_page(submitted):
     <h1>Request a password reset</h1>
     {content}
     <p><a href="/login">Back to sign in</a></p>
+  </section>
+</main>""")
+
+
+
+def email_page(token, current_email, message=""):
+    title = "Update your email"
+    alert = f'<p class="error" role="alert">{safe(message)}</p>' if message else ""
+    return document(title, f"""
+{header()}
+<main class="auth-layout">
+  <section class="auth-card">
+    <h1>{title}</h1>
+    {alert}
+    <form method="post" action="/account/email">
+      <input type="hidden" name="csrf" value="{token}">
+      <label for="email">Email address</label>
+      <input id="email" name="email" type="email" autocomplete="email" maxlength="254"
+             value="{safe(current_email or '')}" required>
+      <button class="button primary" type="submit">Save email</button>
+    </form>
+    {('<p><a href="/account/password">Change password</a></p>' if current_email else '')}
+    <form method="post" action="/logout"><button class="button" type="submit">Sign out</button></form>
+  </section>
+</main>""")
+
+
+def pending_page():
+    return document("Approval pending", f"""
+{header()}
+<main class="workspace">
+  <section class="service-detail">
+    <h1>Approval pending</h1>
+    <p>A DodoStack administrator needs to approve your account before you can open the services.</p>
+    <a class="button primary" href="/account/pending">Check approval status</a>
+    <form method="post" action="/logout"><button class="button" type="submit">Sign out</button></form>
   </section>
 </main>""")

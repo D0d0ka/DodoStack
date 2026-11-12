@@ -175,21 +175,6 @@ function adminHeaders() {
   return { 'Content-Type': 'application/json' };
 }
 
-async function verifyAdminSession() {
-  if (!isAdminPage) return false;
-
-  try {
-    const res = await fetch(`${API}/admin/session`, { headers: adminHeaders() });
-    if (!res.ok) {
-      return false;
-    }
-    const data = await res.json();
-    return Boolean(data.success && data.authenticated);
-  } catch {
-    return false;
-  }
-}
-
 /* ── Page init ─────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
   initSearchAutocomplete();
@@ -199,19 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Crawl modal — present on both pages
   if ($('openCrawlModal')) initCrawlModal();
 
-  // Admin modals
-
-  if (document.body.classList.contains('admin-page')) {
-    initAdminPage();
-  }
-
-  // Logo 10-click easter egg
-
-  // Persistent background status poller — only for admins
-  if (isAdminPage && !document.body.classList.contains('admin-page')) {
-    fetchStatus();
-    setInterval(fetchStatus, 3000);
-  }
+  if (isAdminPage) initAdminPage();
 
   // Search results page — only search.html has #resultsSection
   if ($('resultsSection')) initSearchPage();
@@ -1573,27 +1546,48 @@ function updateStatusUI(data) {
 }
 
 function initAdminPage() {
-  verifyAdminSession().then(isValid => {
-    if (!isValid) {
-      location.replace('/');
-      return;
-    }
+  initAdminSettingsPanel();
+  initCrawlControlsForAdminPage();
+  initSearchHistoryAdmin();
+  initRecommendedAdmin();
+  initHiddenDomainsAdmin();
+  fetchStatus();
+  refreshQueue();
+  loadAdminSettings();
+  loadSearchHistory();
+  loadRecommendedEntries();
+  loadHiddenDomains();
 
-    show($('adminDashboard'));
-    initAdminSettingsPanel();
-    initCrawlControlsForAdminPage();
-    initSearchHistoryAdmin();
-    initRecommendedAdmin();
-    initHiddenDomainsAdmin();
-    fetchStatus();
-    refreshQueue();
-    loadAdminSettings();
-    loadSearchHistory();
-    loadRecommendedEntries();
-    loadHiddenDomains();
+  if (!statusPoller) statusPoller = setInterval(fetchStatus, 3000);
+}
 
-    if (!statusPoller) statusPoller = setInterval(fetchStatus, 3000);
-  });
+async function saveAdminSettings() {
+  const field = $('aiModelInput');
+  const button = $('saveAdminSettingsBtn');
+  const feedback = $('adminSettingsFeedback');
+  const model = field.value.trim();
+  if (!model) {
+    feedback.textContent = 'Enter an AI model name.';
+    feedback.className = 'admin-feedback error';
+    return;
+  }
+  button.disabled = true;
+  try {
+    const response = await fetch(`${API}/admin/settings`, {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify({ai_model: model}),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) throw new Error(data.message || 'Could not save settings.');
+    feedback.textContent = 'Settings saved.';
+    feedback.className = 'admin-feedback success';
+  } catch (error) {
+    feedback.textContent = error instanceof SyntaxError ? 'Sign in to DodoStack and try again.' : error.message;
+    feedback.className = 'admin-feedback error';
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function initAdminSettingsPanel() {
@@ -1606,6 +1600,7 @@ async function loadAdminSettings() {
   if (!$('aiModelInput')) return;
   try {
     const res = await fetch(`${API}/admin/settings`, { headers: adminHeaders() });
+    if (!res.ok) throw new Error("Could not load settings");
     const data = await res.json();
     if (data.success) $('aiModelInput').value = data.ai_model || '';
   } catch {

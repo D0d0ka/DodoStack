@@ -58,13 +58,6 @@ class Profiles:
             sa.Column("profile_id", sa.ForeignKey(f"{model.__tablename__}.id", ondelete="SET NULL"), unique=True),
         )
 
-    def link(self, account_id, profile_id):
-        profile = self.db.session.get(self.model, profile_id)
-        if not profile or getattr(profile, "is_deleted", False):
-            raise ValueError("Service profile does not exist.")
-        self.db.session.execute(self.links.insert().values(account_id=account_id, profile_id=profile_id))
-        self.db.session.commit()
-
     def __call__(self, account):
         with self.lock:
             link = self.db.session.execute(sa.select(self.links.c.profile_id).where(
@@ -77,7 +70,10 @@ class Profiles:
                 return None
             self.db.session.add(profile)
             self.db.session.flush()
-            self.link(account["id"], profile.id)
+            self.db.session.execute(self.links.insert().values(
+                account_id=account["id"], profile_id=profile.id,
+            ))
+            self.db.session.commit()
             return profile
 
     def username(self, account):

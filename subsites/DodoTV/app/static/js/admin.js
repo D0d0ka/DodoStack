@@ -4,14 +4,18 @@
 
   const sidebar = document.getElementById("admin-sidebar");
   const toggle = document.querySelector("[data-admin-toggle]");
-  toggle?.addEventListener("click", () => sidebar?.classList.toggle("open"));
+  const setSidebarOpen = (open) => {
+    sidebar?.classList.toggle("open", open);
+    toggle?.setAttribute("aria-expanded", String(open));
+  };
+  toggle?.addEventListener("click", () => setSidebarOpen(!sidebar?.classList.contains("open")));
   document.addEventListener("click", (event) => {
     if (
       sidebar?.classList.contains("open") &&
       !sidebar.contains(event.target) &&
       !toggle?.contains(event.target)
     ) {
-      sidebar.classList.remove("open");
+      setSidebarOpen(false);
     }
   });
 

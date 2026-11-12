@@ -21,6 +21,7 @@
           <p>Update the description and metadata for {{ show.title }}.</p>
         </div>
         {{ field(form.title, placeholder="Series title") }}
+        {{ field(form.creator) }}
         {{ field(form.description, placeholder="Series synopsis…") }}
         <div class="form-grid">
           {{ field(form.release_year, placeholder="2026") }}

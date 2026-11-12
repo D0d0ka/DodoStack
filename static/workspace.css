@@ -106,3 +106,13 @@ p { color: var(--muted); line-height: 1.55; }
 .account-row .button { margin-top: 7px; }
 .account-row label { display: grid; gap: 5px; }
 .account-row input { padding: 8px; border: 1px solid var(--line); border-radius: 6px; }
+
+.service-logo {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  padding: 4px;
+  object-fit: contain;
+  border-radius: 13px;
+  background: #edf2df;
+}

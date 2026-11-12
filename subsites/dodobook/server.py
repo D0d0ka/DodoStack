@@ -3,15 +3,14 @@ Dodobook – A private social network for friends.
 """
 from dodo.web import (
     WebApplication, UserMixin, render_template, jsonify, request, redirect,
-    url_for, flash, send_from_directory, current_user, require_login, admin_only,
+    url_for, flash, send_from_directory, current_user, require_login, shared_admin, abort,
     shared_signin, shared_signout, Response,
 )
 from dodo.orm import Database, Profiles
-from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from markupsafe import Markup, escape as html_escape
 from sqlalchemy.dialects.sqlite import insert
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 import os
 import posixpath
 import re
@@ -41,13 +40,10 @@ db = Database(app)
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(50), unique=True, nullable=False)
-    email = db.Column(db.String(100), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
+    username = db.Column(db.String(50, collation='NOCASE'), unique=True, nullable=False)
     bio = db.Column(db.Text, default='')
     profile_pic = db.Column(db.String(256), default='')
     role = db.Column(db.String(20), default='user')      # user | moderator | admin
-    status = db.Column(db.String(20), default='pending') # pending | accepted
     last_seen = db.Column(db.DateTime, nullable=True)
     is_deleted = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -70,12 +66,6 @@ class User(UserMixin, db.Model):
         'DirectMessage', foreign_keys='DirectMessage.receiver_id', backref='receiver', lazy='dynamic')
     group_messages = db.relationship(
         'GroupMessage', foreign_keys='GroupMessage.user_id', backref='sender', lazy='dynamic')
-
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
 
     @property
     def display_name(self):
@@ -255,24 +245,10 @@ class ChatLastRead(db.Model):
     )
 
 
-class PasswordResetRequest(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    requested_at = db.Column(db.DateTime, default=datetime.utcnow)
-    is_fulfilled = db.Column(db.Boolean, default=False)
-
-    user = db.relationship('User', foreign_keys=[user_id])
-
-
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 
 def create_profile(account):
-    return User(
-        username=profiles.username(account),
-        email=f'{account["id"]}@accounts.dodostack.invalid',
-        password_hash="", role="user",
-        status="accepted" if account["is_admin"] else "pending",
-    )
+    return User(username=profiles.username(account))
 
 
 profiles = Profiles(db, User, create_profile)
@@ -300,14 +276,22 @@ def update_last_seen():
                 db.session.rollback()
 
 
-def accepted_required(f):
+def can_manage_roles():
+    return shared_admin() or current_user.role == 'admin'
+
+
+def can_moderate():
+    return can_manage_roles() or current_user.role == 'moderator'
+
+
+def book_staff_required(view):
     @require_login
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if current_user.status != "accepted":
-            return redirect(url_for("wait"))
-        return f(*args, **kwargs)
-    return decorated
+    @wraps(view)
+    def protected(*args, **kwargs):
+        if not can_moderate():
+            abort(403)
+        return view(*args, **kwargs)
+    return protected
 
 
 # ── File upload helpers ───────────────────────────────────────────────────────
@@ -361,7 +345,7 @@ def visible_posts(friends=None):
     friend_ids = [friend.id for friend in friends] + [current_user.id]
     return Post.query.filter(db.or_(
         Post.user_id.in_(friend_ids),
-        db.and_(Post.visibility == 'public', Post.author.has(status='accepted')),
+        Post.visibility == 'public',
     ))
 
 
@@ -370,7 +354,7 @@ def serve_static(filename):
     filename = posixpath.normpath(filename)
     if not filename.casefold().startswith('uploads/'):
         return app.send_static_file(filename)
-    if not current_user.is_authenticated or current_user.status != 'accepted':
+    if not current_user.is_authenticated:
         return '', 404
 
     relative = filename.split('/', 1)[1]
@@ -529,7 +513,7 @@ def video_embed_filter(url):
 # ── Page routes ───────────────────────────────────────────────────────────────
 
 @app.route('/')
-@accepted_required
+@require_login
 def index():
     friends = current_user.get_friends()
     groups = current_user.get_groups()
@@ -564,6 +548,7 @@ def index():
         pending_requests=pending_requests,
         group_invitations=group_invitations,
         post_data=post_data,
+        can_moderate=can_moderate(),
     )
 
 
@@ -588,22 +573,14 @@ def logout():
     return shared_signout()
 
 
-@app.get("/wait")
-@require_login
-def wait():
-    if current_user.status == "accepted":
-        return redirect(url_for("index"))
-    return render_template("wait.html")
-
-
 @app.route('/makeapost')
-@accepted_required
+@require_login
 def makeapost():
     return render_template('makeapost.html')
 
 
 @app.route('/addfriend')
-@accepted_required
+@require_login
 def addfriend():
     pending_requests = (Friendship.query
                         .filter_by(addressee_id=current_user.id, status='pending')
@@ -617,38 +594,32 @@ def addfriend():
 
 
 @app.route('/createagroup')
-@accepted_required
+@require_login
 def createagroup():
     friends = current_user.get_friends()
     return render_template('createagroup.html', friends=friends)
 
 
 @app.route('/profile')
-@accepted_required
+@require_login
 def profile():
     return render_template('usersettings.html')
 
 
-@app.route('/adminboard')
-@admin_only
+@app.get('/adminboard')
+@book_staff_required
 def adminboard():
-    pending_users = User.query.filter_by(status='pending', is_deleted=False).all()
-    all_users = User.query.filter_by(status='accepted', is_deleted=False).all()
-    all_posts = Post.query.order_by(Post.created_at.desc()).all()
-    return render_template('adminboard.html',
-                           pending_users=pending_users,
-                           all_users=all_users,
-                           all_posts=all_posts)
+    manage_roles = can_manage_roles()
+    users = User.query.filter_by(is_deleted=False).order_by(User.username).all() if manage_roles else []
+    posts = Post.query if manage_roles else visible_posts()
+    posts = posts.order_by(Post.created_at.desc()).all()
+    return render_template('adminboard.html', manage_roles=manage_roles, users=users, posts=posts)
 
 
-@app.route('/moderatorboard')
-@admin_only
+@app.get('/moderatorboard')
+@book_staff_required
 def moderatorboard():
-    pending_users = User.query.filter_by(status='pending', is_deleted=False).all()
-    all_posts = Post.query.order_by(Post.created_at.desc()).all()
-    return render_template('moderatorboard.html',
-                           pending_users=pending_users,
-                           all_posts=all_posts)
+    return redirect(url_for('adminboard'))
 
 
 @app.route('/pagenotfound')
@@ -669,7 +640,7 @@ def get_user_settings():
     return jsonify({
         'id': current_user.id,
         'username': current_user.username,
-        'email': current_user.email,
+        'email': request.shared_user['email'],
         'bio': current_user.bio or '',
         'profile_pic': current_user.profile_pic_url(),
     })
@@ -679,19 +650,18 @@ def get_user_settings():
 @require_login
 def update_user_settings():
     username = request.form.get('username', '').strip()
-    email = request.form.get('email', '').strip().lower()
     bio = request.form.get('bio', '').strip()
 
-    if not username or not email:
-        return jsonify({'success': False, 'message': 'Username and email are required.'}), 400
+    if not 1 <= len(username) <= 50:
+        return jsonify({'success': False, 'message': 'Use a DodoBook username up to 50 characters.'}), 400
 
-    clash = User.query.filter_by(username=username).first()
-    if clash and clash.id != current_user.id:
+    current_user.username = username
+    current_user.bio = bio
+    try:
+        db.session.flush()
+    except IntegrityError:
+        db.session.rollback()
         return jsonify({'success': False, 'message': 'Username already taken.'}), 409
-
-    clash = User.query.filter_by(email=email).first()
-    if clash and clash.id != current_user.id:
-        return jsonify({'success': False, 'message': 'Email already in use.'}), 409
 
     pic = request.files.get('profilepic')
     if pic and pic.filename:
@@ -699,9 +669,6 @@ def update_user_settings():
         if path:
             current_user.profile_pic = path
 
-    current_user.username = username
-    current_user.email = email
-    current_user.bio = bio
     db.session.commit()
 
     return jsonify({
@@ -722,22 +689,20 @@ def delete_user_account():
 
 def soft_delete_user(user):
     user.is_deleted = True
-    user.username = f'deleted_{user.id}'
-    user.email = f'deleted_{user.id}@deleted.dodobook'
-    user.password_hash = ''
+    user.username = f'deleted_{uuid.uuid4().hex}'
+    user.role = 'user'
     user.profile_pic = ''
     user.bio = ''
     Friendship.query.filter(
         (Friendship.requester_id == user.id) | (Friendship.addressee_id == user.id)
     ).delete(synchronize_session=False)
     GroupMember.query.filter_by(user_id=user.id).delete(synchronize_session=False)
-    PasswordResetRequest.query.filter_by(user_id=user.id).delete(synchronize_session=False)
 
 
 # ── API: Posts ────────────────────────────────────────────────────────────────
 
 @app.route('/api/posts/create', methods=['POST'])
-@accepted_required
+@require_login
 def create_post():
     title = request.form.get('title', '').strip()
     subtitle = request.form.get('subtitle', '').strip()
@@ -789,7 +754,7 @@ def create_post():
 
 
 @app.route('/api/posts/<int:post_id>/like', methods=['POST'])
-@accepted_required
+@require_login
 def toggle_like(post_id):
     post = visible_posts().filter(Post.id == post_id).first()
     if not post:
@@ -808,7 +773,7 @@ def toggle_like(post_id):
 
 
 @app.route('/api/posts/<int:post_id>/comment', methods=['POST'])
-@accepted_required
+@require_login
 def add_comment(post_id):
     if not visible_posts().filter(Post.id == post_id).first():
         return jsonify({'success': False}), 404
@@ -833,12 +798,13 @@ def add_comment(post_id):
 
 
 @app.route('/api/posts/<int:post_id>', methods=['DELETE'])
-@accepted_required
+@require_login
 def delete_post(post_id):
-    post = db.session.get(Post, post_id)
+    posts = Post.query if can_manage_roles() else visible_posts()
+    post = posts.filter(Post.id == post_id).first()
     if not post:
         return jsonify({'success': False}), 404
-    if post.user_id != current_user.id:
+    if post.user_id != current_user.id and not can_moderate():
         return jsonify({'success': False, 'message': 'Permission denied.'}), 403
     db.session.delete(post)
     db.session.commit()
@@ -848,18 +814,19 @@ def delete_post(post_id):
 # ── API: Friends ──────────────────────────────────────────────────────────────
 
 @app.route('/api/friends/search')
-@accepted_required
+@require_login
 def search_friends():
     q = request.args.get('q', '').strip()
     if len(q) < 2:
         return jsonify({'users': []})
 
-    users = (User.query
-             .filter(User.status == 'accepted',
-                     User.is_deleted == False,
-                     User.id != current_user.id,
-                     (User.username.ilike(f'%{q}%') | User.email.ilike(f'%{q}%')))
-             .limit(10).all())
+    match = User.username.ilike(f'%{q}%')
+    if '@' in q:
+        account_id = request.identity.accounts.account_id_by_email(q)
+        if account_id is not None:
+            profile_id = db.select(profiles.links.c.profile_id).where(profiles.links.c.account_id == account_id)
+            match = db.or_(match, User.id.in_(profile_id))
+    users = User.query.filter(User.is_deleted == False, User.id != current_user.id, match).limit(10).all()
 
     results = []
     for u in users:
@@ -886,7 +853,7 @@ def search_friends():
 
 
 @app.route('/api/friends/request', methods=['POST'])
-@accepted_required
+@require_login
 def send_friend_request():
     data = request.get_json() or {}
     user_id = data.get('user_id')
@@ -910,7 +877,7 @@ def send_friend_request():
 
 
 @app.route('/api/friends/respond', methods=['POST'])
-@accepted_required
+@require_login
 def respond_friend_request():
     data = request.get_json() or {}
     friendship_id = data.get('friendship_id')
@@ -933,7 +900,7 @@ def respond_friend_request():
 
 
 @app.route('/api/friends/cancel/<int:friendship_id>', methods=['DELETE'])
-@accepted_required
+@require_login
 def cancel_friend_request(friendship_id):
     friendship = db.session.get(Friendship, friendship_id)
     if (not friendship or
@@ -946,7 +913,7 @@ def cancel_friend_request(friendship_id):
 
 
 @app.route('/api/friends/<int:user_id>', methods=['DELETE'])
-@accepted_required
+@require_login
 def unfriend(user_id):
     friendship = friendship_between(current_user.id, user_id)
     if not friendship:
@@ -957,7 +924,7 @@ def unfriend(user_id):
 
 
 @app.route('/api/friends/list')
-@accepted_required
+@require_login
 def friends_list():
     group_id = request.args.get('exclude_group', type=int)
     friends = current_user.get_friends()
@@ -973,7 +940,7 @@ def friends_list():
 # ── API: Groups ───────────────────────────────────────────────────────────────
 
 @app.route('/api/groups/create', methods=['POST'])
-@accepted_required
+@require_login
 def create_group():
     name = request.form.get('name', '').strip()
     if not name:
@@ -1005,7 +972,7 @@ def create_group():
 
 
 @app.route('/api/groups/<int:group_id>/invite', methods=['POST'])
-@accepted_required
+@require_login
 def invite_to_group(group_id):
     if not GroupMember.query.filter_by(
             group_id=group_id, user_id=current_user.id, status='member').first():
@@ -1029,7 +996,7 @@ def invite_to_group(group_id):
 
 
 @app.route('/api/groups/<int:group_id>/respond', methods=['POST'])
-@accepted_required
+@require_login
 def respond_group_invitation(group_id):
     membership = GroupMember.query.filter_by(
         group_id=group_id, user_id=current_user.id, status='invited').first()
@@ -1052,7 +1019,7 @@ def respond_group_invitation(group_id):
 
 
 @app.route('/api/groups/<int:group_id>/leave', methods=['POST'])
-@accepted_required
+@require_login
 def leave_group(group_id):
     membership = GroupMember.query.filter_by(
         group_id=group_id, user_id=current_user.id, status='member').first()
@@ -1064,7 +1031,7 @@ def leave_group(group_id):
 
 
 @app.route('/api/groups/<int:group_id>/members')
-@accepted_required
+@require_login
 def get_group_members(group_id):
     my_membership = GroupMember.query.filter_by(
         group_id=group_id, user_id=current_user.id, status='member').first()
@@ -1087,7 +1054,7 @@ def get_group_members(group_id):
 
 
 @app.route('/api/groups/<int:group_id>/kick/<int:target_id>', methods=['POST'])
-@accepted_required
+@require_login
 def kick_from_group(group_id, target_id):
     my_membership = GroupMember.query.filter_by(
         group_id=group_id, user_id=current_user.id, status='member', is_admin=True).first()
@@ -1125,7 +1092,7 @@ def _update_last_read(user_id, chat_type, chat_id, max_id):
 
 
 @app.route('/api/chat/messages')
-@accepted_required
+@require_login
 def get_chat_messages():
     chat_type = request.args.get('type')
     chat_id = request.args.get('id', type=int)
@@ -1195,7 +1162,7 @@ def get_chat_messages():
 
 
 @app.route('/api/chat/message', methods=['POST'])
-@accepted_required
+@require_login
 def send_chat_message():
     chat_type = request.form.get('type')
     chat_id = request.form.get('id', type=int)
@@ -1254,7 +1221,7 @@ def send_chat_message():
 
 
 @app.route('/api/unread')
-@accepted_required
+@require_login
 def get_unread_counts():
     unread = {}
     friends = current_user.get_friends()
@@ -1289,80 +1256,38 @@ def get_unread_counts():
 
 # ── API: Admin ────────────────────────────────────────────────────────────────
 
-@app.route('/api/admin/users/<int:user_id>/update', methods=['POST'])
-@admin_only
-def admin_update_user(user_id):
+@app.post('/api/admin/users/<int:user_id>/role')
+@require_login
+def admin_set_role(user_id):
+    if not can_manage_roles():
+        abort(403)
     user = db.session.get(User, user_id)
     if not user or user.is_deleted:
-        return jsonify({'success': False}), 404
-
-    data = request.get_json() or {}
-    username = data.get('username', '').strip()
-    email = data.get('email', '').strip().lower()
-    status = data.get('status')
-    bio = data.get('bio', '').strip()
-
-    if not username or not email:
-        return jsonify({'success': False, 'message': 'Username and email required.'}), 400
-    if status not in ('pending', 'accepted'):
-        return jsonify({'success': False, 'message': 'Invalid status.'}), 400
-
-    clash = User.query.filter_by(username=username).first()
-    if clash and clash.id != user_id:
-        return jsonify({'success': False, 'message': 'Username taken.'}), 409
-    clash = User.query.filter_by(email=email).first()
-    if clash and clash.id != user_id:
-        return jsonify({'success': False, 'message': 'Email in use.'}), 409
-
-    user.username, user.email = username, email
-    user.status, user.bio = status, bio
-    db.session.commit()
-    return jsonify({'success': True})
-
-
-@app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
-@admin_only
-def admin_delete_user(user_id):
-    user = db.session.get(User, user_id)
-    if not user or user.is_deleted:
-        return jsonify({'success': False}), 404
+        return jsonify({'success': False, 'message': 'Profile not found.'}), 404
+    data = request.get_json(silent=True)
+    role = data.get('role') if isinstance(data, dict) else None
+    if role not in ('user', 'moderator', 'admin'):
+        return jsonify({'success': False, 'message': 'Choose a valid DodoBook role.'}), 400
     if user.id == current_user.id:
-        return jsonify({'success': False, 'message': 'Cannot delete yourself.'}), 400
-
-    soft_delete_user(user)
+        return jsonify({'success': False, 'message': 'Choose another DodoBook profile.'}), 400
+    user.role = role
     db.session.commit()
     return jsonify({'success': True})
 
 
-@app.route('/api/moderator/users/<int:user_id>/approve', methods=['POST'])
-@admin_only
-def approve_user(user_id):
-    user = User.query.filter_by(id=user_id, status='pending', is_deleted=False).first()
-    if not user:
-        return jsonify({'success': False}), 404
-    user.status = 'accepted'
-    db.session.commit()
-    return jsonify({'success': True})
-
-
-@app.route('/api/moderator/users/<int:user_id>/decline', methods=['POST'])
-@admin_only
-def decline_user(user_id):
-    user = User.query.filter_by(id=user_id, status='pending', is_deleted=False).first()
-    if not user:
-        return jsonify({'success': False}), 404
-    soft_delete_user(user)
-    db.session.commit()
-    return jsonify({'success': True})
-
-
-@app.route('/api/moderator/posts/<int:post_id>', methods=['DELETE'])
-@admin_only
+@app.delete('/api/moderator/posts/<int:post_id>')
+@book_staff_required
 def moderator_delete_post(post_id):
-    post = db.session.get(Post, post_id)
-    if not post:
+    return delete_post(post_id)
+
+
+@app.delete('/api/moderator/comments/<int:comment_id>')
+@book_staff_required
+def moderator_delete_comment(comment_id):
+    comment = db.session.get(Comment, comment_id)
+    if not comment or (not can_manage_roles() and not visible_posts().filter(Post.id == comment.post_id).first()):
         return jsonify({'success': False}), 404
-    db.session.delete(post)
+    db.session.delete(comment)
     db.session.commit()
     return jsonify({'success': True})
 
@@ -1381,7 +1306,6 @@ def init_db():
 
 app.admin_tab(
     "DodoBook", "/adminboard", prefixes=("admin_", "moderator_"),
-    endpoints=("adminboard", "moderatorboard", "approve_user", "decline_user"),
-    assets=("static",),
+    endpoints=("adminboard", "moderatorboard"), assets=("static",), on_service=True,
 )
 init_db()

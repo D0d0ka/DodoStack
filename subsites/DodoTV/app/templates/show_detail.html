@@ -27,6 +27,7 @@
         {% if show.genres %}<span class="dot"></span><span>{{ show.genres|map(attribute='name')|join(' · ') }}</span>{% endif %}
         {% if not show.published %}<span class="dot"></span><span class="badge-draft">DRAFT</span>{% endif %}
       </div>
+      {% if show.creator %}<p class="detail-desc">Created by {{ show.creator }}</p>{% endif %}
       {% if show.description %}<p class="detail-desc">{{ show.description }}</p>{% endif %}
       {% if show.genres %}
       <div class="detail-genres">

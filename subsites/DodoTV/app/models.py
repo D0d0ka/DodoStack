@@ -104,6 +104,7 @@ class Movie(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False, index=True)
+    creator = db.Column(db.String(255), default="", nullable=False)
     description = db.Column(db.Text, default="", nullable=False)
     release_year = db.Column(db.Integer, nullable=True, index=True)
     age_rating = db.Column(db.String(16), default="PG-13", nullable=False)
@@ -166,6 +167,7 @@ class TVShow(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False, index=True)
+    creator = db.Column(db.String(255), default="", nullable=False)
     description = db.Column(db.Text, default="", nullable=False)
     release_year = db.Column(db.Integer, nullable=True, index=True)
     age_rating = db.Column(db.String(16), default="PG-13", nullable=False)

@@ -1,14 +1,12 @@
 """Authentication, account and watch-history routes."""
 from __future__ import annotations
 
-from dodo.web import Blueprint, flash, redirect, render_template, url_for
+from dodo.web import Blueprint, abort, flash, redirect, render_template, url_for
 from dodo.web import current_user, require_login, shared_signin, shared_signout
 
 from ..extensions import db
-from ..forms import ProfileForm
-from ..models import User, WatchHistory
+from ..models import WatchHistory, WatchProgress
 from ..services import progress_card
-from ..models import WatchProgress
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -29,34 +27,9 @@ def logout():
     return shared_signout()
 
 
-@auth_bp.route("/profile", methods=["GET", "POST"])
+@auth_bp.get("/profile")
 @require_login
 def profile():
-    form = ProfileForm(obj=current_user)
-    if form.validate_on_submit():
-        username = form.username.data.strip()
-        email = form.email.data.strip().lower()
-        errors = False
-        duplicate = User.query.filter(
-            db.func.lower(User.username) == username.lower(), User.id != current_user.id
-        ).first()
-        if duplicate:
-            form.username.errors.append("That username is already taken.")
-            errors = True
-        duplicate_email = User.query.filter(
-            db.func.lower(User.email) == email, User.id != current_user.id
-        ).first()
-        if duplicate_email:
-            form.email.errors.append("That email is already in use.")
-            errors = True
-
-        if not errors:
-            current_user.username = username
-            current_user.email = email
-            db.session.commit()
-            flash("Your profile has been updated.", "success")
-            return redirect(url_for("auth.profile"))
-
     recent = (
         WatchProgress.query.filter_by(user_id=current_user.id)
         .order_by(WatchProgress.updated_at.desc())
@@ -64,7 +37,7 @@ def profile():
         .all()
     )
     cards = [card for item in recent if (card := progress_card(item))]
-    return render_template("auth/profile.html", form=form, cards=cards)
+    return render_template("auth/profile.html", cards=cards)
 
 
 @auth_bp.route("/history")

@@ -130,7 +130,6 @@ def create_app(config_object=Config) -> WebApplication:
     db.init_app(app)
     app.before_request(verify_form_token)
     app.profile_loader = load_profile
-    app.profile_links = profiles
 
     with app.app_context():
         ensure_upload_dirs()
