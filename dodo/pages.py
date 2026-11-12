@@ -8,8 +8,12 @@ SERVICE_DESCRIPTIONS = {
     "doodle": "Search the web, media, and indexed sites.",
     "dodobook": "Share posts and chat with friends and groups.",
     "dodotv": "Browse the catalog and keep track of what you watch.",
+    "dodokey": "Store and manage your passwords in an encrypted vault.",
 }
-SERVICE_NAMES = {"doodle": "Doodle", "dodobook": "DodoBook", "dodotv": "Dodo TV", "todo": "Todo"}
+SERVICE_NAMES = {
+    "doodle": "Doodle", "dodobook": "DodoBook", "dodotv": "Dodo TV",
+    "todo": "Todo", "dodokey": "DodoKey",
+}
 
 
 def service_name(key):
@@ -49,10 +53,9 @@ def header(account="", origin=""):
 </header>"""
 
 
-def dashboard(user, services, selected, *, private=False):
+def dashboard(user, services, *, private=False):
     if private and not user:
         services = {}
-    selected = selected if selected in services else ""
     if user:
         account = f"""<div class="account">
   <a class="username" href="/account/email">{safe(user["username"])}</a>
@@ -65,55 +68,37 @@ def dashboard(user, services, selected, *, private=False):
   <a class="button primary" href="/signup">Create account</a>
 </div>"""
 
-    tabs = [nav_link("Overview", "/", not selected)]
     cards = []
-    for service in services:
+    for service, url in services.items():
         name = safe(service_name(service))
-        tab_url = "/?" + urlencode({"service": service})
-        tabs.append(nav_link(name, tab_url, selected == service))
         cards.append(f"""
-<a class="service-card" href="{safe(tab_url)}">
+<a class="service-card" href="{safe(url)}">
   {brand_logo(service)}
   <div><h3>{name}</h3><p>{safe(SERVICE_DESCRIPTIONS.get(service, 'Open this service with your Dodo account.'))}</p></div>
   <span class="arrow" aria-hidden="true">→</span>
 </a>""")
 
-    if selected:
-        name = safe(service_name(selected))
-        description = safe(SERVICE_DESCRIPTIONS.get(selected, "Open this service with your Dodo account."))
-        url = safe(services[selected])
-        content = f"""
-<section class="service-detail">
-  {brand_logo(selected)}
-  <h1>{name}</h1>
-  <p>{description}</p>
-  <a class="button primary" href="{url}">Open {name} <span aria-hidden="true">↗</span></a>
-</section>"""
-    else:
-        service_list = ""
-        if cards:
-            service_list = f"""
+    service_list = ""
+    if cards:
+        service_list = f"""
 <section class="services" aria-labelledby="services-heading">
   <h2 id="services-heading">Your services</h2>
   <div class="service-grid">{''.join(cards)}</div>
 </section>"""
-        intro = ("Sign in with an approved account to open the services."
-                 if private and not user else "One account for all your Dodo services.")
-        content = f"""
-<section class="hero">
-  <div>
-    <h1>Your Dodo<br>workspace</h1>
-    <p>{intro}</p>
-  </div>
-  <img src="/static/dodo.png" width="190" height="190" alt="">
-</section>
-{service_list}"""
+    intro = ("Sign in with an approved account to open the services."
+             if private and not user else "One account for all your Dodo services.")
     return document("Workspace", f"""
 {header(account)}
 <main class="workspace">
-  <nav class="tabs" aria-label="Workspace">{''.join(tabs)}</nav>
-  {content}
-</main>""", icon=selected if selected in SERVICE_NAMES else "stack")
+  <section class="hero">
+    <div>
+      <h1>Your Dodo<br>workspace</h1>
+      <p>{intro}</p>
+    </div>
+    <img src="/static/dodo.png" width="190" height="190" alt="">
+  </section>
+  {service_list}
+</main>""")
 
 
 def nav_link(label, url, current):

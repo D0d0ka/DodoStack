@@ -53,9 +53,6 @@ a:focus-visible, button:focus-visible, input:focus-visible {
 .button.primary { background: var(--green); border-color: var(--green); color: #fff; }
 .button.primary:hover { background: #164331; }
 .workspace { width: min(1100px, calc(100% - 48px)); margin: 30px auto 70px; }
-.tabs { display: flex; gap: 24px; margin-bottom: 25px; border-bottom: 1px solid var(--line); overflow-x: auto; }
-.tabs a { display: block; padding: 12px 3px; border-bottom: 3px solid transparent; color: var(--muted); font-weight: 650; text-decoration: none; }
-.tabs a[aria-current] { border-color: var(--green); color: var(--ink); }
 .hero, .auth-art {
   background: radial-gradient(circle at 75% 50%, #e9efc7 0, transparent 37%), #e0ead6;
   border: 1px solid #d3e0c9;

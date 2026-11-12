@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>DodoKey · Password vault</title>
+  <link rel="icon" href="{{ url_for('static', filename='dodokey.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vault.css') }}">
+  <script type="module" src="{{ url_for('static', filename='vault.js') }}"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="brand" href="{{ url_for('index') }}">
+        <img src="{{ url_for('static', filename='dodokey.png') }}" alt="" width="40" height="40">
+        <span>DodoKey</span>
+      </a>
+      <nav aria-label="Account">
+        <a href="{{ workspace_url }}/">Workspace</a>
+        <form method="post" action="{{ url_for('logout') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit">Sign out</button>
+        </form>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <p id="status" role="status"></p>
+    <noscript><p>Enable JavaScript to open your password vault.</p></noscript>
+
+    <section id="locked-panel" class="card unlock" hidden>
+      <h1 id="unlock-title">Unlock your vault</h1>
+      <p id="setup-note" hidden>Choose a separate vault password with at least 12 characters. Keep it somewhere safe because DodoStack cannot recover it.</p>
+      <form id="unlock-form" method="post" autocomplete="off">
+        <fieldset id="unlock-fields">
+          <label for="master">Vault password</label>
+          <input id="master" type="password" required maxlength="256" aria-describedby="setup-note">
+          <div id="confirmation-field" hidden>
+            <label for="confirmation">Confirm vault password</label>
+            <input id="confirmation" type="password" maxlength="256">
+          </div>
+          <button id="unlock-submit" class="primary" type="submit">Unlock vault</button>
+        </fieldset>
+      </form>
+    </section>
+
+    <section id="open-panel" hidden>
+      <div class="vault-heading">
+        <div>
+          <h1>Password vault</h1>
+          <p id="entry-count"></p>
+        </div>
+        <div class="actions">
+          <button id="lock" type="button">Lock vault</button>
+          <button id="add" class="primary" type="button">Add login</button>
+        </div>
+      </div>
+      <div class="vault-layout">
+        <section class="card entries" aria-label="Saved logins">
+          <p id="empty">No saved logins yet.</p>
+          <ul id="entry-list"></ul>
+        </section>
+
+        <section id="editor" class="card" hidden>
+          <h2 id="editor-title">Add login</h2>
+          <form id="entry-form" method="post" autocomplete="off">
+            <fieldset id="entry-fields">
+              <label for="entry-title">Name</label>
+              <input id="entry-title" maxlength="120" required>
+              <label for="entry-website">Website</label>
+              <input id="entry-website" maxlength="512" placeholder="example.com" spellcheck="false">
+              <label for="entry-username">Username or email</label>
+              <input id="entry-username" maxlength="256" spellcheck="false">
+              <label for="entry-password">Password</label>
+              <input id="entry-password" type="password" maxlength="1024" required>
+              <div class="actions">
+                <button id="show-password" type="button" aria-pressed="false">Show password</button>
+                <button id="generate" type="button">Generate</button>
+              </div>
+              <div class="actions editor-actions">
+                <button class="primary" type="submit">Save login</button>
+                <button id="cancel" type="button">Cancel</button>
+                <button id="remove" class="danger" type="button" hidden>Delete login</button>
+              </div>
+            </fieldset>
+          </form>
+        </section>
+      </div>
+    </section>
+
+    <template id="entry-template">
+      <li class="entry">
+        <div class="entry-info">
+          <h2 class="entry-name"></h2>
+          <p class="entry-detail"></p>
+        </div>
+        <div class="actions">
+          <button class="copy" type="button">Copy password</button>
+          <button class="edit" type="button">Edit</button>
+        </div>
+      </li>
+    </template>
+  </main>
+</body>
+</html>

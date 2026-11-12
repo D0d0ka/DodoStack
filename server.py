@@ -42,6 +42,7 @@ SERVICE_MODULES = {
     "doodle": "subsites.doodle.app",
     "dodobook": "subsites.dodobook.server",
     "dodotv": "subsites.DodoTV.run",
+    "dodokey": "subsites.dodokey.app",
 }
 services = {name: f"{name}.localhost" for name in SERVICE_MODULES}
 identity = Identity(accounts, services, PORT, private=PRIVATE)
@@ -54,6 +55,7 @@ BRAND_FILES = {
     "doodle": BASE_DIR / "subsites/doodle/templates/dodo.png",
     "dodobook": BASE_DIR / "subsites/dodobook/static/dodobook.png",
     "dodotv": BASE_DIR / "subsites/DodoTV/dodotv.png",
+    "dodokey": BASE_DIR / "subsites/dodokey/static/dodokey.png",
 }
 
 

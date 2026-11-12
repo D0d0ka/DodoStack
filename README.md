@@ -20,6 +20,7 @@ python server.py
 | Doodle | [doodle.localhost:8000](http://doodle.localhost:8000) |
 | DodoBook | [dodobook.localhost:8000](http://dodobook.localhost:8000) |
 | Dodo TV | [dodotv.localhost:8000](http://dodotv.localhost:8000) |
+| DodoKey | [dodokey.localhost:8000](http://dodokey.localhost:8000) |
 | Administration | [localhost:8000/admin](http://localhost:8000/admin) |
 
 Dodo TV uses FFmpeg and FFprobe for video uploads, validation, and preview frames. Doodle's optional AI answers require a local Ollama instance. Set `DODO_PORT` to change the port.
@@ -30,6 +31,10 @@ All services require a DodoStack account. Sign in with your username or email ad
 
 - `DODO_MIN_PASSWORD_LENGTH` sets the minimum length for new and changed passwords. The default is 8.
 - `DODO_PRIVATE=true` requires workspace approval for new accounts. Approve them in **Admin → Accounts**.
+
+## DodoKey password vault
+
+Open DodoKey from **Your services** and set a separate vault password of at least 12 characters. Add, edit, generate, copy, and delete saved logins from the vault. Your browser encrypts the vault before saving it to DodoStack and locks it after five minutes of inactivity. Keep your vault password safe because resetting your DodoStack account password cannot recover the vault.
 
 ## Administrators
 
@@ -43,7 +48,7 @@ The workspace **Admin** tabs manage shared accounts, Doodle, DodoBook, and Dodo 
 
 ## Local databases
 
-DodoStack creates databases from the current schema. The shared account, DodoBook, Doodle, and Dodo TV databases are initialized on startup. Todo initializes its task database on first use.
+DodoStack creates databases from the current schema. The shared account, DodoBook, Doodle, and Dodo TV databases are initialized on startup. Todo and DodoKey initialize their databases on first use.
 
 | Database | Path relative to the project root |
 | --- | --- |
@@ -52,6 +57,7 @@ DodoStack creates databases from the current schema. The shared account, DodoBoo
 | Doodle | `subsites/doodle/doodle.db` |
 | DodoBook | `subsites/dodobook/instance/dodobook.db` |
 | Dodo TV | `subsites/DodoTV/instance/dodotv.db` |
+| DodoKey | `subsites/dodokey/instance/vaults.sqlite3` |
 
 ## Add a service and admin tab
 

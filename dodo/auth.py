@@ -386,7 +386,12 @@ class Identity:
                 response = redirect("/")
             return response
         if path == "/":
-            return Response.html(pages.dashboard(user, {key: self.service_url(key) for key in self.services}, request.value("service"), private=self.private))
+            selected = request.value("service")
+            if selected in self.services:
+                return redirect(self.service_url(selected))
+            return Response.html(pages.dashboard(
+                user, {key: self.service_url(key) for key in self.services}, private=self.private,
+            ))
         return Response.text("Not found", 404)
 
     def auth_form(self, mode, service, target, **values):
