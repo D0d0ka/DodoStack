@@ -21,8 +21,8 @@ def get_db():
     return db
 
 
-def page_start(title: str, user: dict):
-    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f8f7ef"><title>{safe(title)} — Dodo To-do</title><link rel="icon" type="image/png" href="/static/images/dodo_sign.png"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/static/css/style.css"></head><body><div class="page-shell"><header class="topbar"><a class="brand" href="/" aria-label="Dodo To-do home"><img src="/static/images/dodo_sign.png" alt=""><span>dodo<span class="brand-light">list</span></span></a><div class="account-tools"><a class="workspace-link" href="http://localhost:{app.auth.port}/">Workspace</a><span class="account-name">{safe(user['username'])}</span><form action="/logout" method="post"><button class="signout-button" type="submit">Sign out</button></form></div></header>'''
+def page_start(title: str, user: dict, workspace_url: str):
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f8f7ef"><title>{safe(title)} — Dodo To-do</title><link rel="icon" type="image/png" href="/static/images/dodo_sign.png"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/static/css/style.css"></head><body><div class="page-shell"><header class="topbar"><a class="brand" href="/" aria-label="Dodo To-do home"><img src="/static/images/dodo_sign.png" alt=""><span>dodo<span class="brand-light">list</span></span></a><div class="account-tools"><a class="workspace-link" href="{safe(workspace_url)}/">Workspace</a><span class="account-name">{safe(user['username'])}</span><form action="/logout" method="post"><button class="signout-button" type="submit">Sign out</button></form></div></header>'''
 
 
 def page_end():
@@ -51,7 +51,7 @@ def index(request: Request):
     clear = '<form action="/clear-completed" method="post"><button class="clear-button" type="submit">Clear done</button></form>' if completed else ""
     content = f'''<main><section class="intro"><div class="eyebrow"><span class="sparkle">✳</span> YOUR DAY, YOUR PACE</div><h1>Make room for<br><span>what matters.</span></h1><p>One small step at a time. You’ve got this.</p></section><section class="todo-card" aria-label="To-do list"><div class="card-topline"><div><span class="section-label">YOUR LIST</span><h2>{safe(user['username'])}’s list <span class="sun">☀</span></h2></div><div class="progress-badge"><span class="progress-icon">✓</span>{completed} done</div></div><form class="add-form" action="/add" method="post"><label class="visually-hidden" for="new-task">Add a task</label><span class="add-plus" aria-hidden="true">+</span><input id="new-task" name="title" type="text" maxlength="180" placeholder="What would you like to do?" autocomplete="off" required><button type="submit">Add task <span aria-hidden="true">↗</span></button></form><div class="list-toolbar"><nav class="filters" aria-label="Filter tasks">{filters}</nav>{clear}</div>{tasks}<footer class="card-footer"><span><span class="footer-sparkle">✦</span> Small steps count.</span><span>{remaining} {'task' if remaining == 1 else 'tasks'} left</span></footer></section><p class="closing-note">Made for the things that make a day <span>yours.</span></p></main>'''
     db.close()
-    return Response.html(page_start("Make room for what matters", user) + content + page_end())
+    return Response.html(page_start("Make room for what matters", user, request.workspace_url) + content + page_end())
 
 
 @app.route("/add", ("POST",))
@@ -100,4 +100,4 @@ def clear_completed(request: Request):
 
 @app.route("/logout", ("POST",))
 def logout(request: Request):
-    return redirect("http://localhost:" + request.headers.get("host", "localhost:8000").rsplit(":", 1)[-1] + "/logout?service=todo")
+    return redirect(f"{request.workspace_url}/logout?service=todo")

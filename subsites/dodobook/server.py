@@ -564,7 +564,7 @@ def signup():
 
 @app.get("/forgot-password")
 def forgot_password():
-    return redirect(f"http://localhost:{request.identity.port}/forgot-password")
+    return redirect(f"{request.identity.workspace_url}/forgot-password")
 
 
 @app.post("/logout")

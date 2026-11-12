@@ -213,8 +213,10 @@ class AccountStore:
 
 
 class Identity:
-    def __init__(self, accounts: AccountStore, services: dict[str, str], port: int, *, private=False):
+    def __init__(self, accounts: AccountStore, services: dict[str, str], port: int, *, private=False, workspace_host="localhost"):
         self.accounts, self.services, self.port = accounts, services, port
+        self.workspace_host = workspace_host
+        self.workspace_url = f"http://{workspace_host}:{port}"
         self.private = private
         self.main_session = "dodo_main_session"
 
@@ -266,7 +268,7 @@ class Identity:
         if request.query:
             path += "?" + urlencode([(key, value) for key, values in request.query.items() for value in values])
         query = urlencode({"service": service, "path": path})
-        return redirect(f"http://localhost:{self.port}/auth/authorize?{query}")
+        return redirect(f"{self.workspace_url}/auth/authorize?{query}")
 
     def handle_service(self, service: str, request: Request):
         if request.path == "/_auth/logout":
@@ -285,7 +287,7 @@ class Identity:
                 )
             user = self.accounts.account(int(ticket["sub"]))
             if not user or self.account_destination(user):
-                return redirect(f"http://localhost:{self.port}/")
+                return redirect(f"{self.workspace_url}/")
             lifetime = 12 * 3600
             session = self.accounts.issue({
                 "sub": ticket["sub"], "name": ticket["name"], "aud": service,
@@ -300,7 +302,7 @@ class Identity:
 
     def sign_in_problem(self, service: str, message: str, status: int):
         response = Response.html(pages.sign_in_problem(
-            service, message, self.service_url(service), f"http://localhost:{self.port}",
+            service, message, self.service_url(service), self.workspace_url,
         ), status)
         response.headers.update({"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
         return response

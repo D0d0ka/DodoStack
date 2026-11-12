@@ -2,7 +2,7 @@
 
 Services register handlers with ``@app.route`` and can use ``request``,
 ``Response``, ``redirect`` and ``require_user``. The host server mounts each
-service on its own localhost subdomain while keeping them in one process.
+service on its own hostname while keeping them in one process.
 """
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ class Request:
     user: dict | None = None
     flash: str | None = None
     response_cookies: list[str] = field(default_factory=list)
+    workspace_url: str = ""
 
     def value(self, name: str, default: str = "") -> str:
         return self.form.get(name, self.query.get(name, [default]))[0]
@@ -74,7 +75,6 @@ class Application:
         self.name = name
         self.static_dir = Path(static_dir).resolve() if static_dir else None
         self.routes: list[tuple[str, re.Pattern, Callable]] = []
-        self.auth = None
 
     def route(self, path: str, methods: tuple[str, ...] = ("GET",)):
         def register(handler: Callable) -> Callable:
@@ -97,16 +97,17 @@ class Application:
         kind = "text/css; charset=utf-8" if target.suffix == ".css" else "image/png" if target.suffix == ".png" else "application/octet-stream"
         return Response(target.read_bytes(), 200, {"Content-Type": kind})
 
-    def dispatch(self, request: Request) -> Response:
-        if self.auth:
-            request.user = self.auth.get_service_user(self.name, request.cookies.get("dodo_session"))
+    def dispatch(self, request: Request, *, auth=None) -> Response:
+        if auth:
+            request.workspace_url = auth.workspace_url
+            request.user = auth.get_service_user(self.name, request.cookies.get("dodo_session"))
         if request.path.startswith("/static/"):
             return self.static(request.path.removeprefix("/static/"))
         for method, pattern, handler in self.routes:
             match = pattern.match(request.path)
             if match and method == request.method:
                 if getattr(handler, "requires_user", False) and request.user is None:
-                    return self.auth.authorize_redirect(self.name, request)
+                    return auth.authorize_redirect(self.name, request)
                 response = handler(request, **{key: int(value) for key, value in match.groupdict().items()})
                 if isinstance(response, str):
                     response = Response.html(response)

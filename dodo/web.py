@@ -268,7 +268,7 @@ def url_for(endpoint, **values):
     if endpoint.startswith("."):
         endpoint = request.endpoint.split(".")[0] + endpoint
     path = request.adapter.build(endpoint, values)
-    origin = f"http://localhost:{request.identity.port}"
+    origin = request.identity.workspace_url
     admin_endpoint = current_app.is_admin_endpoint(endpoint)
     if ((admin_endpoint and (request.admin_mount or not current_app.admin.on_service))
             or (request.admin_mount and current_app.is_admin_asset(endpoint))):
@@ -285,7 +285,7 @@ def render_template(name, **values):
     context = {"admin_navigation": navigation, "url_for": url_for, "request": request, "current_user": current_user,
                "get_flashed_messages": get_flashed_messages, "csrf_token": csrf_token,
                "admin_base": f"/admin/{request.service}", "admin_preview": request.admin_mount and shared_admin(),
-               "workspace_url": f"http://localhost:{request.identity.port}"}
+               "workspace_url": request.identity.workspace_url}
     for callback in current_app.processors:
         context.update(callback())
     return current_app.templates.get_template(name).render(**(context | values))
@@ -333,12 +333,12 @@ def require_login(view):
 def shared_signin(target="/", *, signup=False):
     from urllib.parse import urlencode
     endpoint = "/signup" if signup else "/auth/authorize"
-    return redirect(f"http://localhost:{request.identity.port}{endpoint}?" +
+    return redirect(f"{request.identity.workspace_url}{endpoint}?" +
                     urlencode({"service": request.service, "path": target}), 303)
 
 
 def shared_signout():
-    return redirect(f"http://localhost:{request.identity.port}/logout?service={request.service}", 303)
+    return redirect(f"{request.identity.workspace_url}/logout?service={request.service}", 303)
 
 
 def csrf_token():

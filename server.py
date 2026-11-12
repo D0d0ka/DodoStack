@@ -7,7 +7,9 @@ import argparse
 import hashlib
 import hmac
 import importlib
+from ipaddress import IPv4Address
 import os
+import re
 import secrets
 import sqlite3
 import sys
@@ -44,8 +46,6 @@ SERVICE_MODULES = {
     "dodotv": "subsites.DodoTV.run",
     "dodokey": "subsites.dodokey.app",
 }
-services = {name: f"{name}.localhost" for name in SERVICE_MODULES}
-identity = Identity(accounts, services, PORT, private=PRIVATE)
 workspace = Application("workspace", static_dir=BASE_DIR / "static")
 
 
@@ -71,18 +71,62 @@ sys.path.insert(0, str(BASE_DIR))
 service_apps = {}
 for service_name, module_name in SERVICE_MODULES.items():
     module = importlib.import_module(module_name)
-    if isinstance(module.app, Application):
-        module.app.auth = identity
     service_apps[service_name] = module.app
 
 
-identity.admin_tabs = {
+admin_tabs = {
     key: (app.admin.label, f"/admin/{key}{app.admin.entry}")
     for key, app in service_apps.items() if isinstance(app, WebApplication) and app.admin
 }
 
 
-def control_panel(request):
+def valid_hostname(host):
+    return len(host) <= 253 and all(
+        re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
+        for label in host.split(".")
+    )
+
+
+def host_routes(config):
+    local_hosts = ("localhost", "127.0.0.1", "0.0.0.0")
+    workspace_domains = {"localhost": "localhost"}
+    for entry in config.lower().split(","):
+        if not entry.strip():
+            continue
+        host, _, domain = (part.strip().rstrip(".") for part in entry.partition("="))
+        domain = domain or host
+        if not valid_hostname(host) or not valid_hostname(domain):
+            raise ValueError("DODO_WORKSPACE_HOSTS expects hostnames or IPv4 addresses with a service domain")
+        try:
+            IPv4Address(host)
+        except ValueError:
+            if host.split(".")[-1].isdigit():
+                raise ValueError(f"Invalid DODO_WORKSPACE_HOSTS address: {host}")
+        if domain.split(".")[-1].isdigit():
+            raise ValueError(f"Set a DNS service domain for {host} using {host}=example.home.arpa")
+        if host in local_hosts or host in workspace_domains:
+            raise ValueError(f"Duplicate or reserved DodoStack workspace hostname: {host}")
+        workspace_domains[host] = domain
+
+    routes = {host: None for host in (*local_hosts, *workspace_domains)}
+    for host, domain in workspace_domains.items():
+        services = {name: f"{name}.{domain}" for name in SERVICE_MODULES}
+        identity = Identity(accounts, services, PORT, private=PRIVATE, workspace_host=host)
+        identity.admin_tabs = admin_tabs
+        routes[host] = (identity, None)
+        for name, address in services.items():
+            if address in routes or not valid_hostname(address):
+                raise ValueError(f"Duplicate or invalid DodoStack service hostname: {address}")
+            routes[address] = (identity, name)
+    for host in local_hosts[1:]:
+        routes[host] = routes["localhost"]
+    return routes
+
+
+HOST_ROUTES = host_routes(os.environ.get("DODO_WORKSPACE_HOSTS", ""))
+
+
+def control_panel(request, identity):
     user = identity.main_user(request)
     path = request.path
     admin = path.startswith("/admin")
@@ -143,8 +187,11 @@ class DodoHandler(BaseHTTPRequestHandler):
         hostname = host.partition(":")[0].rstrip(".")
         # Redact query strings, which can contain sign-in tickets.
         self.requestline = f"{self.command} {target.path} {self.request_version}"
-        main = hostname in {"localhost", "127.0.0.1", "0.0.0.0"}
-        service = next((name for name, address in services.items() if hostname == address), None)
+        route = HOST_ROUTES.get(hostname)
+        if route is None:
+            return self.send_result(Response.text("Unknown DodoStack service", 404))
+        identity, service = route
+        main = service is None
         app = service_apps.get(service)
         parts = target.path.split("/", 3)
         if main and len(parts) >= 3 and parts[1] == "admin" and parts[2] in identity.admin_tabs:
@@ -161,7 +208,7 @@ class DodoHandler(BaseHTTPRequestHandler):
             elif len(parts) == 3 or not parts[3]:
                 response = redirect(identity.admin_tabs[service][1])
             else:
-                return self.serve_web(service_apps[service], service, "/" + parts[3], target, user, admin=True)
+                return self.serve_web(service_apps[service], service, "/" + parts[3], target, user, identity, admin=True)
             return self.send_result(response)
         if service and not target.path.startswith("/_auth/"):
             cookies = SimpleCookie(self.headers.get("Cookie", ""))
@@ -172,28 +219,26 @@ class DodoHandler(BaseHTTPRequestHandler):
                 if self.command not in {"GET", "HEAD"} or target.path.startswith("/api/"):
                     return self.send_result(Response.text("Sign in with an approved account.", 401))
                 query = urlencode({"service": service, "path": target.path + ("?" + target.query if target.query else "")})
-                return self.send_result(redirect(f"http://localhost:{PORT}/auth/authorize?{query}"))
+                return self.send_result(redirect(f"{identity.workspace_url}/auth/authorize?{query}"))
             if isinstance(app, WebApplication):
-                return self.serve_web(app, service, target.path, target, user)
+                return self.serve_web(app, service, target.path, target, user, identity)
         request = request_from_handler(self)
         if main:
             if request.path.startswith("/static/"):
                 response = workspace_static(request)
             elif request.path in {"/admin", "/admin/role", "/admin/password", "/admin/approve", "/account/password", "/account/email"}:
-                response = control_panel(request)
+                response = control_panel(request, identity)
             else:
                 response = identity.handle_main(request)
         elif service:
             response = identity.handle_service(service, request)
             if response is None:
-                response = app.dispatch(request) if isinstance(app, Application) else Response.text("Not found", 404)
-        else:
-            response = Response.text("Unknown DodoStack service", 404)
+                response = app.dispatch(request, auth=identity) if isinstance(app, Application) else Response.text("Not found", 404)
         self.send_result(response, request.response_cookies)
 
     do_GET = do_HEAD = do_POST = do_PUT = do_PATCH = do_DELETE = do_OPTIONS = dispatch
 
-    def serve_web(self, app, service, path, target, user, *, admin=False):
+    def serve_web(self, app, service, path, target, user, identity, *, admin=False):
         def decode(value):
             return unquote_to_bytes(value).decode("latin1")
 
@@ -272,9 +317,11 @@ def main():
             parser.error(str(error))
         return
     server = ThreadingHTTPServer((os.environ.get("DODO_HOST", "127.0.0.1"), PORT), DodoHandler)
-    print(f"DodoStack is running at http://localhost:{PORT}")
-    for name, host in services.items():
-        print(f"  {name.title()}: http://{host}:{PORT}")
+    for host, (identity, service) in HOST_ROUTES.items():
+        if service is None and host == identity.workspace_host:
+            print(f"DodoStack is running at {identity.workspace_url}")
+            for name in identity.services:
+                print(f"  {name.title()}: {identity.service_url(name)}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
