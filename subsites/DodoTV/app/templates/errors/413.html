@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Upload too large — {{ site.site_name }}{% endblock %}
+{% block content %}
+<div class="error-page">
+  <div>
+    <div class="error-code">413</div>
+    <h1>That file is too large.</h1>
+    <p>The upload exceeded the server limit. Compress the video or ask the administrator to raise <code>MAX_UPLOAD_MB</code> in the environment configuration.</p>
+    <div class="hero-actions" style="justify-content:center">
+      <a class="btn btn-primary" href="{{ url_for('main.index') }}">Back to home</a>
+      <a class="btn btn-ghost" href="{{ url_for('auth.profile') if current_user.is_authenticated else url_for('auth.login') }}">Go to account</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "admin/base.html" %}
+{% from "_macros.html" import field, checkbox %}
+{% block title %}Settings{% endblock %}
+{% block page_title %}Platform settings{% endblock %}
+{% block page_sub %}Branding, registration and administrator access{% endblock %}
+
+{% block topbar_actions %}
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('main.index') }}" target="_blank" rel="noopener">View site ↗</a>
+{% endblock %}
+
+{% block content %}
+<div class="settings-grid">
+  <div>
+    <section class="admin-panel">
+      <div class="admin-section">
+        <h2>Brand &amp; copy</h2>
+        <p>These values are used across the public site header, footer and page metadata.</p>
+      </div>
+      <form method="post" action="{{ url_for('admin.settings') }}" novalidate>
+        {{ form.hidden_tag() }}
+        {{ field(form.site_name, placeholder="Dodo TV") }}
+        {{ field(form.tagline, placeholder="Stories worth staying in for.") }}
+        {{ field(form.footer_note, placeholder="A short note for the footer") }}
+        {{ checkbox(form.allow_registration, 'When disabled, the join page is closed and existing members can still sign in.') }}
+        <div class="form-actions-bar">
+          <button class="btn btn-primary" type="submit">Save settings</button>
+          <a class="btn btn-ghost" href="{{ url_for('admin.dashboard') }}">Cancel</a>
+        </div>
+      </form>
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-section">
+        <h2>Administrator accounts</h2>
+        <p>Administrators are never created automatically. Use the secure CLI commands below from the project folder.</p>
+      </div>
+      <div class="form-note">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg>
+        <span>Run these commands in the same environment (virtualenv) and directory as the app. Passwords are prompted securely and never passed on the command line.</span>
+      </div>
+      <ul class="settings-list">
+        <li><code>flask create-admin</code> — create a new administrator, or promote an existing account by email/username.</li>
+        <li><code>flask promote-admin you@example.com</code> — promote an existing member to administrator.</li>
+        <li><code>flask init-db</code> — create missing tables and seed default genres.</li>
+        <li><code>flask storage-report</code> — print upload storage usage by folder.</li>
+        <li><code>flask seed-demo --with-admin</code> — generate a real demo catalog with sample videos.</li>
+      </ul>
+    </section>
+  </div>
+
+  <aside>
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Environment</h2>
+          <p>Configuration lives in <code>.env</code>.</p>
+        </div>
+      </div>
+      <ul class="settings-list">
+        <li><code>SECRET_KEY</code> — session signing key. Use a long random value in production.</li>
+        <li><code>DATABASE_URL</code> — defaults to SQLite in <code>instance/dodotv.db</code>.</li>
+        <li><code>UPLOAD_FOLDER</code> — media storage directory. Defaults to <code>uploads/</code>.</li>
+        <li><code>MAX_UPLOAD_MB</code> — maximum video upload size (default 4096 MB).</li>
+        <li><code>FFMPEG_BINARY</code> / <code>FFPROBE_BINARY</code> — paths to FFmpeg tools.</li>
+        <li><code>SESSION_COOKIE_SECURE</code> — set to <code>true</code> when serving over HTTPS.</li>
+      </ul>
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Registration policy</h2>
+          <p>How new accounts are handled.</p>
+        </div>
+      </div>
+      <div class="info-row"><span>Open registration</span><span>{{ 'Enabled' if form.allow_registration.data else 'Closed' }}</span></div>
+      <div class="info-row"><span>Automatic admin promotion</span><span>Never</span></div>
+      <div class="info-row"><span>First-user privilege</span><span>None</span></div>
+      <p class="muted" style="font-size:.74rem;margin-top:12px">Every account created through the registration form is a regular member. Administrator access is granted only through the CLI or by an existing administrator in the Users screen.</p>
+    </section>
+  </aside>
+</div>
+{% endblock %}

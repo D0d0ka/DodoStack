@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/static/facicon.ico">
+    <title>Create a group - Dodobook</title>
+    <style>
+        :root{--bg:#071428;--panel:#0b2742;--card:#0f3b61;--accent:#1e66b0;--muted:#234a6f;--text:#e6f2ff;--muted-text:#bcd4f2;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
+        html,body{height:100%;margin:0;background: linear-gradient(180deg,var(--bg),#062033 80%);color:var(--text);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+        body{overflow:auto}
+        header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;background:linear-gradient(90deg,rgba(255,255,255,0.02),transparent);backdrop-filter:blur(4px)}
+        header h1{margin:0;cursor:pointer;transition:all 0.2s ease;font-size:18px}
+        header h1:hover{color:var(--accent)}
+        .center{max-width:700px;margin:28px auto;padding:18px}
+        .panel{background:linear-gradient(180deg,var(--panel),var(--card));border-radius:12px;padding:18px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+        label{display:block;margin:10px 0 4px;color:var(--muted-text);font-size:13px}
+        input[type="text"]{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text);transition:all 0.2s ease;box-sizing:border-box}
+        input[type="text"]:focus{outline:none;border-color:var(--accent);background:rgba(30,102,176,0.05)}
+        .pill{background:var(--accent);color:white;border:1px solid var(--accent);padding:10px 16px;border-radius:8px;cursor:pointer;transition:all 0.2s ease;font-weight:500}
+        .pill:hover{background:rgba(30,102,176,0.8);border-color:rgba(30,102,176,0.8)}
+        .pill-secondary{background:transparent;border:1px solid rgba(255,255,255,0.1);color:var(--muted-text)}
+        .pill-secondary:hover{background:rgba(255,255,255,0.05);color:var(--text)}
+        .actions-row{display:flex;gap:8px;margin-top:12px}
+        .group-pic-upload{display:flex;align-items:center;gap:12px;margin:12px 0}
+        .group-pic-preview{width:80px;height:80px;border-radius:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);object-fit:cover}
+        .friends-list{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+        .friend-check{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);cursor:pointer;transition:all 0.12s ease}
+        .friend-check:hover{background:rgba(255,255,255,0.05)}
+        .friend-check input[type="checkbox"]{width:16px;height:16px;cursor:pointer;flex-shrink:0}
+        .friend-check img{width:32px;height:32px;border-radius:6px;object-fit:cover}
+        .friend-check-name{font-size:14px}
+    </style>
+</head>
+<body>
+    <header>
+        <h1 onclick="location.href='/'">Dodobook</h1>
+    </header>
+
+    <main class="center">
+        <div class="panel">
+            <h2 style="margin-top:0">Create a group</h2>
+            <form method="POST" action="/api/groups/create" enctype="multipart/form-data">
+                <label>Group name</label>
+                <input type="text" name="name" placeholder="e.g. Doodle Club" required>
+
+                <label style="margin-top:12px">Group Picture</label>
+                <div class="group-pic-upload">
+                    <input type="file" id="grouppic" name="grouppic" accept="image/*" style="display:none" onchange="previewGroupPic(event)">
+                    <img id="groupPicPreview" class="group-pic-preview" src="{{ url_for('static', filename='default-group.svg') }}" alt="Group Preview">
+                    <button type="button" class="pill" onclick="document.getElementById('grouppic').click()">Choose Picture</button>
+                </div>
+
+                {% if friends %}
+                <label style="margin-top:12px">Invite friends (optional)</label>
+                <div class="friends-list">
+                    {% for friend in friends %}
+                    <label class="friend-check">
+                        <input type="checkbox" name="members" value="{{ friend.id }}">
+                        {% if friend.profile_pic %}
+                            <img src="{{ url_for('static', filename=friend.profile_pic) }}" alt="{{ friend.username }}">
+                        {% else %}
+                            <img src="{{ url_for('static', filename='default-avatar.svg') }}" alt="{{ friend.username }}">
+                        {% endif %}
+                        <span class="friend-check-name">{{ friend.username }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="actions-row">
+                    <button type="submit" class="pill">Create group</button>
+                    <button type="button" class="pill pill-secondary" onclick="location.href='/'">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </main>
+    <script>
+        function previewGroupPic(event) {
+            const file = event.target.files[0];
+            const preview = document.getElementById('groupPicPreview');
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) { preview.src = e.target.result; };
+                reader.readAsDataURL(file);
+            }
+        }
+    </script>
+</body>
+</html>

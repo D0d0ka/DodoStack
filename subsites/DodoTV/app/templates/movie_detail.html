@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% from "_macros.html" import content_row, frame_gallery, icon_play, icon_info, rating_widget with context %}
+{% block title %}{{ movie.title }} — {{ site.site_name }}{% endblock %}
+{% block body_class %}detail-page{% endblock %}
+
+{% block content %}
+<section class="detail-hero">
+  {% if poster %}<div class="detail-backdrop" style="background-image: url('{{ poster }}')"></div>{% endif %}
+  <div class="container detail-inner">
+    <div class="detail-poster">
+      {% if poster %}
+        <img src="{{ poster }}" alt="{{ movie.title }} poster">
+      {% else %}
+        <span class="card-fallback" aria-hidden="true">{{ movie.title[:1]|upper }}</span>
+      {% endif %}
+    </div>
+    <div class="detail-copy">
+      <span class="eyebrow">Movie{% if movie.featured %} · Featured{% endif %}</span>
+      <h1>{{ movie.title }}</h1>
+      <div class="detail-meta">
+        {% if movie.release_year %}<span>{{ movie.release_year }}</span><span class="dot"></span>{% endif %}
+        {% if movie.runtime_display %}<span>{{ movie.runtime_display }}</span><span class="dot"></span>{% endif %}
+        <span class="rating">{{ movie.age_rating }}</span>
+        {% if movie.genres %}<span class="dot"></span><span>{{ movie.genres|map(attribute='name')|join(' · ') }}</span>{% endif %}
+        {% if not movie.published %}<span class="dot"></span><span class="badge-draft">DRAFT</span>{% endif %}
+      </div>
+      {% if movie.description %}<p class="detail-desc">{{ movie.description }}</p>{% endif %}
+      {% if movie.genres %}
+      <div class="detail-genres">
+        <div class="genre-chips">
+          {% for genre in movie.genres %}<a class="chip" href="{{ url_for('main.browse', genre=genre.slug) }}">{{ genre.name }}</a>{% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="detail-actions">
+        {% if movie.video_path %}
+          <a class="btn btn-primary btn-lg" href="{{ watch_url }}">
+            {{ icon_play() }} {% if progress and progress.percent %}Resume from {{ progress.position|duration }}{% else %}Play movie{% endif %}
+          </a>
+        {% else %}
+          <span class="btn btn-ghost btn-lg is-disabled">Video coming soon</span>
+        {% endif %}
+        {% if trailer_url %}
+          <button type="button" class="btn btn-ghost btn-lg" data-trailer="{{ trailer_url }}" data-trailer-title="{{ movie.title }} — Trailer"{% if trailer_subtitles %} data-trailer-subtitles='{{ trailer_subtitles|tojson }}'{% endif %}>{{ icon_info() }} Watch trailer{% if trailer_subtitles %} with subtitles{% endif %}</button>
+        {% endif %}
+        {% if admin_preview %}
+          <a class="btn btn-ghost btn-lg" href="{{ url_for('admin.movie_edit', movie_id=movie.id) }}">Edit movie</a>
+        {% endif %}
+      </div>
+
+      {% if progress and progress.percent and not progress.completed %}
+      <div class="resume-note">
+        <span class="mini-progress"><span style="width: {{ progress.percent }}%"></span></span>
+        {{ progress.percent }}% watched · {{ progress.position|duration }} of {{ progress.duration|duration }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<div class="container detail-body">
+  <div class="detail-columns">
+    <div class="about-panel">
+      <h2>About this movie</h2>
+      {% if movie.description %}
+        <p>{{ movie.description }}</p>
+      {% else %}
+        <p class="muted">No description has been added for this movie yet.</p>
+      {% endif %}
+
+      {% if movie.subtitles %}
+      <div style="margin-top:34px">
+        <h2>Subtitles</h2>
+        <div class="genre-chips" style="margin-top:12px">
+          {% for subtitle in movie.subtitles %}
+            <span class="chip">{{ subtitle.label }} ({{ subtitle.language }}){% if subtitle.is_default %} · Default{% endif %}</span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if related %}
+      <div style="margin-top:10px">
+        {{ content_row("More like this", related, "related-movies", url_for('main.browse', type='movie')) }}
+      </div>
+      {% endif %}
+    </div>
+
+    <aside class="info-panel">
+      <h3>Title details</h3>
+      <div class="info-row"><span>Type</span><span>Movie</span></div>
+      <div class="info-row"><span>Release year</span><span>{{ movie.release_year or '—' }}</span></div>
+      <div class="info-row"><span>Runtime</span><span>{{ movie.runtime_display or '—' }}</span></div>
+      <div class="info-row"><span>Age rating</span><span>{{ movie.age_rating }}</span></div>
+      {% if movie.genres %}<div class="info-row"><span>Genres</span><span>{{ movie.genres|map(attribute='name')|join(', ') }}</span></div>{% endif %}
+      <div class="info-row"><span>Added</span><span>{{ movie.created_at|timeago }}</span></div>
+      <div class="info-row"><span>Trailer</span><span>{{ 'Available' if movie.trailer_path else 'Not available' }}</span></div>
+      <div class="info-row"><span>Subtitles</span><span>{{ movie.subtitles|length }} track{{ '' if movie.subtitles|length == 1 else 's' }}</span></div>
+      <div class="info-row"><span>Status</span><span>{{ 'Published' if movie.published else 'Draft' }}</span></div>
+    </aside>
+  </div>
+
+  {{ frame_gallery(gallery, "movie-gallery", "Frames from " ~ movie.title) }}
+
+  {{ rating_widget(rating, url_for('main.rate_movie', movie_id=movie.id), url_for('auth.login', next=request.path), 'movie') }}
+</div>
+{% endblock %}

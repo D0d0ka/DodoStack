@@ -30,13 +30,20 @@ class AccountStore:
         self.secret = secret.encode()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
             db.execute("""CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL COLLATE NOCASE UNIQUE,
                 password_hash TEXT NOT NULL,
                 session_version INTEGER NOT NULL DEFAULT 0,
+                is_admin INTEGER NOT NULL DEFAULT 0,
+                password_reset_requested INTEGER NOT NULL DEFAULT 0,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
             columns = {row[1] for row in db.execute("PRAGMA table_info(users)")}
+            if "is_admin" not in columns:
+                db.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+            if "password_reset_requested" not in columns:
+                db.execute("ALTER TABLE users ADD COLUMN password_reset_requested INTEGER NOT NULL DEFAULT 0")
             if "session_version" not in columns:
                 db.execute("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
 
@@ -76,6 +83,40 @@ class AccountStore:
         if user and self.verify_password(password, user["password_hash"]):
             return {"id": user["id"], "username": user["username"]}
         return None
+
+    def account(self, user_id):
+        with self.connect() as db:
+            row = db.execute("SELECT id, username, is_admin FROM users WHERE id=?", (user_id,)).fetchone()
+        return {**row, "is_admin": bool(row["is_admin"])} if row else None
+
+    def set_admin(self, username, enabled):
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            user = db.execute("SELECT id, is_admin FROM users WHERE username=?", (username,)).fetchone()
+            if not user:
+                raise ValueError("Unknown DodoStack account.")
+            if not enabled and user["is_admin"] and db.execute(
+                "SELECT COUNT(*) FROM users WHERE is_admin=1"
+            ).fetchone()[0] == 1:
+                raise ValueError("Keep at least one administrator.")
+            db.execute("UPDATE users SET is_admin=? WHERE id=?", (enabled, user["id"]))
+
+    def list_accounts(self):
+        with self.connect() as db:
+            return db.execute("SELECT username, is_admin, password_reset_requested FROM users ORDER BY username").fetchall()
+
+    def request_password_reset(self, username):
+        with self.connect() as db:
+            db.execute("UPDATE users SET password_reset_requested=1 WHERE username=?", (username,))
+
+    def reset_password(self, username, password):
+        if not 8 <= len(password) <= 255:
+            raise ValueError("Use a password between 8 and 255 characters.")
+        with self.connect() as db:
+            db.execute(
+                "UPDATE users SET password_hash=?, session_version=session_version+1, password_reset_requested=0 WHERE username=?",
+                (self.hash_password(password), username),
+            )
 
     def session_version(self, user_id: int) -> int:
         with self.connect() as db:
@@ -134,17 +175,16 @@ class Identity:
         self.main_session = "dodo_main_session"
 
     def main_user(self, request: Request):
-        token = request.cookies.get(self.main_session)
-        payload = self.accounts.read_claims(token, "server")
-        if not payload or not self.accounts.is_current(payload):
-            return None
-        return {"id": int(payload["sub"]), "username": payload["name"]}
+        return self.session_user(request.cookies.get(self.main_session), "server")
 
     def get_service_user(self, service: str, token: str | None):
-        payload = self.accounts.read_claims(token, service)
+        return self.session_user(token, service)
+
+    def session_user(self, token: str | None, audience: str):
+        payload = self.accounts.read_claims(token, audience)
         if not payload or not self.accounts.is_current(payload):
             return None
-        return {"id": int(payload["sub"]), "username": payload["name"]}
+        return self.accounts.account(int(payload["sub"]))
 
     def issue_assertion(self, source_service: str, target_service: str, user: dict, claims: dict | None = None, ttl: int = 60):
         """Create a brief signed user assertion for a trusted service call."""
@@ -218,6 +258,11 @@ class Identity:
             if user:
                 return self._issue_ticket(service, user, target)
             return Response.html(pages.auth_page("login", service=service, target=target))
+        if path == "/forgot-password":
+            submitted = request.method == "POST"
+            if submitted:
+                self.accounts.request_password_reset(request.value("username").strip())
+            return Response.html(pages.reset_request_page(submitted))
         if path in {"/login", "/signup"}:
             mode = "signup" if path == "/signup" else "login"
             service, target = request.value("service"), request.value("path", "/")
@@ -248,7 +293,7 @@ class Identity:
                     return redirect("/")
                 return Response.html(pages.auth_page(mode, error=error, service=service, target=target))
             if user:
-                return redirect("/")
+                return self._issue_ticket(service, user, target) if service in self.services else redirect("/")
             return Response.html(pages.auth_page(mode, service=service, target=target))
         if path == "/logout":
             if user:

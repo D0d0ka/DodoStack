@@ -100,3 +100,9 @@ p { color: var(--muted); line-height: 1.55; }
   .auth-layout { grid-template-columns: 1fr; }
   .auth-art { display: none; }
 }
+.admin-accounts { margin-top: 24px; }
+.account-row { padding: 22px; }
+.account-row form { margin-top: 12px; }
+.account-row .button { margin-top: 7px; }
+.account-row label { display: grid; gap: 5px; }
+.account-row input { padding: 8px; border: 1px solid var(--line); border-radius: 6px; }

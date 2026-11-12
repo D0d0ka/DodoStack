@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Doodle Search</title>
+  <link rel="icon" type="image/png" href="dodo.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="search-page"{% if request.admin_mount %} data-admin-base="{{ admin_base }}"{% endif %}>
+{{ admin_navigation }}
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="site-header">
+    <div class="header-inner search-header-inner">
+      <a href="{{ url_for('index') }}" class="brand" aria-label="Doodle home">
+        <img src="dodo.png" alt="" class="brand-mascot" />
+        <span>Doodle</span>
+      </a>
+
+      <form class="header-search-box" action="{{ url_for('search_page') }}" method="GET">
+        <input type="text" name="q" id="searchInput"
+               placeholder="Search Doodle…"
+               autocomplete="off"
+               spellcheck="false" />
+        <div class="search-suggestions hidden" id="searchSuggestions"></div>
+        <input type="hidden" name="tab" id="tabInput" value="all" />
+        <button type="submit" class="search-btn">Search</button>
+        <button type="button" class="search-btn filter-toggle-btn" id="toggleFiltersBtn" aria-expanded="false">Show filters</button>
+      </form>
+    </div>
+  </header>
+
+  <!-- ── Main ────────────────────────────────────────────────────────────── -->
+  <main>
+    <section class="results-section" id="resultsSection">
+
+      <!-- Tab bar -->
+      <nav class="tab-bar" role="tablist" aria-label="Search categories">
+        {% if not request.admin_mount %}
+        <button class="tab-btn" data-tab="ai" role="tab">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3.5"/></svg>
+          AI
+        </button>
+        {% endif %}
+        <button class="tab-btn active" data-tab="all" role="tab">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          All
+        </button>
+        <button class="tab-btn" data-tab="pictures" role="tab">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Pictures
+        </button>
+        <button class="tab-btn" data-tab="videos" role="tab">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          Videos
+        </button>
+        <button class="tab-btn" data-tab="sound" role="tab">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          Sound
+        </button>
+        <button class="tab-btn" data-tab="youtube" role="tab">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6a3 3 0 0 0-2.1 2.1C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1C24 15.9 24 12 24 12s0-3.9-.5-5.8zM9.75 15.5v-7l6.5 3.5-6.5 3.5z"/></svg>
+          YouTube
+        </button>
+        <button class="tab-btn" data-tab="social" role="tab">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h8"/><path d="M6 10h12"/><path d="M4 14h16"/><path d="M2 18h20"/></svg>
+          Social
+        </button>
+      </nav>
+
+      <section class="filters-panel hidden" id="filtersPanel" aria-label="Advanced filters">
+        <div class="filters-grid">
+          <label class="filter-field">
+            <span>From date</span>
+            <input type="date" id="filterFromDate" />
+          </label>
+          <label class="filter-field">
+            <span>To date</span>
+            <input type="date" id="filterToDate" />
+          </label>
+          <label class="filter-field">
+            <span>Domain</span>
+            <input type="text" id="filterDomain" placeholder="example.com" />
+          </label>
+          <label class="filter-field">
+            <span>Language</span>
+            <select id="filterLanguage">
+              <option value="all">All languages</option>
+              <option value="et">Estonian</option>
+              <option value="en">English</option>
+              <option value="fi">Finnish</option>
+              <option value="de">German</option>
+              <option value="ru">Russian</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </label>
+          <label class="filter-field">
+            <span>Content type</span>
+            <select id="filterContentType">
+              <option value="all">All types</option>
+              <option value="general">General</option>
+              <option value="article">Article</option>
+              <option value="blog">Blog</option>
+              <option value="documentation">Documentation</option>
+              <option value="forum">Forum</option>
+              <option value="news">News</option>
+              <option value="ecommerce">E-commerce</option>
+              <option value="media">Media</option>
+            </select>
+          </label>
+          <label class="filter-field">
+            <span>Sort</span>
+            <select id="filterSort">
+              <option value="relevance">Relevance</option>
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="most_matches">Most matches</option>
+            </select>
+          </label>
+          <label class="filter-field filter-field-wide">
+            <span>Exclude words</span>
+            <input type="text" id="filterExclude" placeholder="spoiler politics ads" />
+          </label>
+          <label class="filter-checkbox">
+            <input type="checkbox" id="filterExactPhraseOnly" />
+            <span>Exact phrase only</span>
+          </label>
+        </div>
+        <div class="filters-actions">
+          <button type="button" class="btn-secondary" id="applyFiltersBtn">Apply filters</button>
+          <button type="button" class="btn-secondary" id="resetFiltersBtn">Reset</button>
+        </div>
+      </section>
+
+      <!-- All tab -->
+      <div class="tab-content" id="tab-all">
+        <!-- Easter Egg panel -->
+        <div id="easterEggPanel" class="hidden"></div>
+        <p class="results-summary" id="resultsSummary"></p>
+        <section class="recommended-block hidden" id="recommendedBlock" aria-label="Recommended results">
+          <h2 class="recommended-heading">Recommended</h2>
+          <div class="recommended-list" id="recommendedList"></div>
+        </section>
+        <div class="results-list" id="resultsList"></div>
+        <div class="search-pagination hidden" id="searchPagination" aria-label="Search pagination"></div>
+      </div>
+
+      <!-- Pictures tab -->
+      <div class="tab-content hidden" id="tab-pictures">
+        <p class="results-summary" id="picsSummary"></p>
+        <div class="pics-grid" id="picsGrid"></div>
+      </div>
+
+      <!-- Videos tab -->
+      <div class="tab-content hidden" id="tab-videos">
+        <p class="results-summary" id="videosSummary"></p>
+        <div class="videos-list" id="videosList"></div>
+      </div>
+
+      <!-- Sound tab -->
+      <div class="tab-content hidden" id="tab-sound">
+        <p class="results-summary" id="soundSummary"></p>
+        <div class="sound-list" id="soundList"></div>
+      </div>
+
+      <!-- YouTube tab -->
+      <div class="tab-content hidden" id="tab-youtube">
+        <p class="results-summary" id="ytSummary"></p>
+        <div class="yt-list" id="ytList"></div>
+      </div>
+
+      <!-- Social tab -->
+      <div class="tab-content hidden" id="tab-social">
+        <p class="results-summary" id="socialSummary"></p>
+        <div class="social-list" id="socialList"></div>
+      </div>
+
+      <!-- AI tab -->
+      <div class="tab-content hidden" id="tab-ai">
+        <p class="results-summary" id="aiSummary"></p>
+        <div class="ai-panel" id="aiPanel">
+          <div class="ai-answer" id="aiAnswer"></div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

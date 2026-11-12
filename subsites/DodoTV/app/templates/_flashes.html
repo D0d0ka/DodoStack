@@ -1,0 +1,15 @@
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="toast-stack" aria-live="polite" aria-atomic="true">
+    {% for category, message in messages %}
+      <div class="toast toast-{{ category }}" role="status">
+        <span class="toast-dot"></span>
+        <p>{{ message }}</p>
+        <button type="button" class="toast-close" aria-label="Dismiss notification" data-toast-close>
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}

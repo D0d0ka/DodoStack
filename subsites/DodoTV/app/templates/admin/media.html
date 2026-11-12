@@ -1,0 +1,161 @@
+{% extends "admin/base.html" %}
+{% block title %}Uploads &amp; Media{% endblock %}
+{% block page_title %}Uploads &amp; Media{% endblock %}
+{% block page_sub %}{{ usage.total|filesize }} stored across {{ usage.categories|length }} folders{% endblock %}
+
+{% block topbar_actions %}
+  <a class="btn btn-primary btn-sm" href="{{ url_for('admin.movie_new') }}">+ Upload movie</a>
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.shows') }}">Manage shows</a>
+{% endblock %}
+
+{% block content %}
+{% if not ffmpeg %}
+<div class="ffmpeg-banner" role="alert">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg>
+  <div>
+    <strong>FFmpeg was not detected.</strong>
+    New video uploads cannot be validated and preview frames cannot be generated. Install FFmpeg
+    and ensure <code>ffmpeg</code> and <code>ffprobe</code> are available on the PATH.
+  </div>
+</div>
+{% endif %}
+
+<div class="stat-grid">
+  <article class="stat-card">
+    <span class="stat-icon"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
+    <div class="value">{{ usage.total|filesize }}</div>
+    <div class="label">Total storage used</div>
+    <div class="sub">All uploads, frames and subtitles</div>
+  </article>
+  <article class="stat-card violet">
+    <span class="stat-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5L5 20"/></svg></span>
+    <div class="value">{{ counts.frames }}</div>
+    <div class="label">Generated frames</div>
+    <div class="sub">Available as posters and thumbnails</div>
+  </article>
+  <article class="stat-card green">
+    <span class="stat-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14M16 5v14"/></svg></span>
+    <div class="value">{{ counts.movies + counts.episodes }}</div>
+    <div class="label">Video records</div>
+    <div class="sub">{{ counts.movies }} movies · {{ counts.episodes }} episodes</div>
+  </article>
+  <article class="stat-card orange">
+    <span class="stat-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 13h4M13 13h4M7 16h7M14 10h3"/></svg></span>
+    <div class="value">{{ counts.subtitles }}</div>
+    <div class="label">Subtitle tracks</div>
+    <div class="sub">WebVTT files served to the player</div>
+  </article>
+</div>
+
+<div class="dash-grid">
+  <div>
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Generated preview frames</h2>
+          <p>The most recent frames extracted with FFmpeg.</p>
+        </div>
+      </div>
+      {% if assets %}
+      <div class="asset-grid">
+        {% for asset in assets %}
+        <article class="asset-card">
+          <img src="{{ asset.path|media }}" alt="Preview frame" loading="lazy">
+          <div class="asset-card-body">
+            <span title="{{ asset.path }}">
+              {% if asset.movie %}{{ asset.movie.title }}
+              {% elif asset.episode %}{{ asset.episode.show.title }} · {{ asset.episode.display_code }}
+              {% else %}Unattached frame{% endif %}
+            </span>
+            <form method="post" action="{{ url_for('admin.delete_asset', asset_id=asset.id) }}" data-confirm="Delete this generated frame file?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn danger" type="submit" aria-label="Delete frame">×</button>
+            </form>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="admin-empty">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5L5 20"/></svg>
+        <h3>No generated frames</h3>
+        <p>Frames are created automatically when a movie or episode video is uploaded.</p>
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Orphaned files</h2>
+          <p>Files inside the upload folder that no content record references.</p>
+        </div>
+        {% if orphans %}
+        <form method="post" action="{{ url_for('admin.cleanup_orphans') }}" data-confirm="Delete all {{ orphans|length }} orphaned file(s)? This cannot be undone.">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-danger btn-sm" type="submit">Clean up all</button>
+        </form>
+        {% endif %}
+      </div>
+
+      {% if orphans %}
+      <div class="orphan-list">
+        {% for orphan in orphans %}
+        <div class="orphan-row">
+          <code title="{{ orphan.path }}">{{ orphan.path }}</code>
+          <span>{{ orphan.size|filesize }}</span>
+          <form method="post" action="{{ url_for('admin.delete_orphan') }}" data-confirm="Delete the orphaned file “{{ orphan.path }}”?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="path" value="{{ orphan.path }}">
+            <button class="mini-btn danger" type="submit">Delete</button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted" style="font-size:.78rem">No orphaned files. Every upload is referenced by a catalog record.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <aside>
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Storage by folder</h2>
+          <p>Where your uploads live on disk.</p>
+        </div>
+      </div>
+      <div class="storage-bars">
+        {% for category, size in usage.categories.items() %}
+        <div class="storage-row">
+          <div class="storage-top">
+            <span>{{ category|replace('_', ' ') }}</span>
+            <span>{{ size|filesize }}</span>
+          </div>
+          <div class="storage-track">
+            <span style="width: {{ (size / usage.total * 100) if usage.total else 0 }}%"></span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Media rules</h2>
+          <p>How Dodo TV handles uploaded files.</p>
+        </div>
+      </div>
+      <ul class="settings-list">
+        <li>Only relative paths below the upload folder are stored in the database.</li>
+        <li>Posters are served from <code>/media/…</code> and videos from Range-enabled <code>/stream/…</code> routes.</li>
+        <li>Uploaded videos are validated with FFprobe. Invalid files are rejected, not silently kept.</li>
+        <li>Deleting a movie, show, season or episode also removes its uploaded files.</li>
+        <li>Files under <code>temp/</code> are always treated as orphaned.</li>
+      </ul>
+    </section>
+  </aside>
+</div>
+{% endblock %}

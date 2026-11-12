@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "_macros.html" import content_row, field %}
+{% block title %}Your profile — {{ site.site_name }}{% endblock %}
+
+{% block content %}
+<div class="container page-shell">
+  <div class="profile-banner reveal">
+    <span class="avatar profile-avatar">{{ current_user.initial }}</span>
+    <div>
+      <h1>{{ current_user.username }}</h1>
+      <p>{{ current_user.email }} · Member since {{ current_user.created_at.strftime('%B %Y') }}</p>
+    </div>
+    <div class="profile-stats">
+      <div><strong>{{ current_user.watch_progress|length }}</strong><span>Titles started</span></div>
+      <div><strong>{{ current_user.watch_history|length }}</strong><span>Watch entries</span></div>
+    </div>
+  </div>
+
+  <div class="profile-grid">
+    <section class="panel">
+      <h2>Account details</h2>
+      <p>Update your display name and email address.</p>
+      <form method="post" action="{{ url_for('auth.profile') }}" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="form-grid">
+          {{ field(form.username) }}
+          {{ field(form.email) }}
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Save changes</button>
+          <a class="btn btn-ghost" href="{{ url_for('auth.history') }}">View watch history</a>
+        </div>
+      </form>
+      <a href="{{ workspace_url }}/account/password">Change your DodoStack password</a>
+    </section>
+
+    <aside class="panel">
+      <h2>Your Dodo TV</h2>
+      <p>A snapshot of your viewing activity.</p>
+      <div class="info-row"><span>Account status</span><span>{{ 'Active' if current_user.is_active else 'Deactivated' }}</span></div>
+      <div class="info-row"><span>Role</span><span>{{ 'Administrator' if request.shared_user.is_admin else 'Member' }}</span></div>
+      <div class="info-row"><span>Last sign-in</span><span>{{ current_user.last_login_at|timeago if current_user.last_login_at else 'This session' }}</span></div>
+      <div class="info-row"><span>In-progress titles</span><span>{{ current_user.watch_progress|selectattr('completed', 'equalto', false)|list|length }}</span></div>
+      <div style="margin-top:20px;display:flex;flex-direction:column;gap:8px">
+        <a class="btn btn-ghost btn-block" href="{{ url_for('main.browse') }}">Find something to watch</a>
+      </div>
+    </aside>
+  </div>
+
+  {% if cards %}
+    <div style="margin-top:30px">
+      {{ content_row("Keep watching", cards, "profile-continue", url_for('auth.history'), eyebrow="Your progress") }}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

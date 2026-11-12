@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/static/facicon.ico">
+    <title>Make a post - Dodobook</title>
+    <style>
+        :root{--bg:#071428;--panel:#0b2742;--card:#0f3b61;--accent:#1e66b0;--muted:#234a6f;--text:#e6f2ff;--muted-text:#bcd4f2;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
+        html,body{height:100%;margin:0;background: linear-gradient(180deg,var(--bg),#062033 80%);color:var(--text);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+        body{overflow:auto}
+        header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;background:linear-gradient(90deg,rgba(255,255,255,0.02),transparent);backdrop-filter:blur(4px)}
+        header h1{margin:0;cursor:pointer;transition:all 0.2s ease;font-size:18px}
+        header h1:hover{color:var(--accent)}
+        .center{max-width:860px;margin:28px auto;padding:18px}
+        .panel{background:linear-gradient(180deg,var(--panel),var(--card));border-radius:12px;padding:18px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+        label{display:block;margin:10px 0 4px;color:var(--muted-text);font-size:13px}
+        textarea{width:100%;min-height:160px;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text);resize:vertical;transition:all 0.2s ease;box-sizing:border-box}
+        textarea:focus{outline:none;border-color:var(--accent);background:rgba(30,102,176,0.05)}
+        input[type="text"]{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text);transition:all 0.2s ease;box-sizing:border-box}
+        input[type="text"]:focus{outline:none;border-color:var(--accent);background:rgba(30,102,176,0.05)}
+        select{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:var(--panel);color:var(--text);transition:all 0.2s ease;box-sizing:border-box;cursor:pointer}
+        select:focus{outline:none;border-color:var(--accent)}
+        select option{background:var(--panel);color:var(--text)}
+        .pill{background:var(--accent);color:white;border:1px solid var(--accent);padding:10px 16px;border-radius:8px;cursor:pointer;transition:all 0.2s ease;font-weight:500}
+        .pill:hover{background:rgba(30,102,176,0.8)}
+        .pill-secondary{background:transparent;border:1px solid rgba(255,255,255,0.1);color:var(--muted-text)}
+        .pill-secondary:hover{background:rgba(255,255,255,0.05);color:var(--text)}
+        .actions-row{display:flex;gap:8px;margin-top:12px}
+        .image-upload-area{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
+        .image-preview-wrap{position:relative;width:100px;height:100px}
+        .image-preview{width:100%;height:100%;border-radius:8px;object-fit:cover;border:1px solid rgba(255,255,255,0.08);display:block}
+        .image-remove-btn{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:rgba(232,107,107,0.9);border:none;color:white;cursor:pointer;font-size:12px;line-height:20px;text-align:center;padding:0;font-weight:bold}
+        .image-remove-btn:hover{background:rgba(232,107,107,1)}
+        .error-box{background:rgba(232,107,107,0.1);border-left:3px solid rgba(232,107,107,0.6);padding:12px;border-radius:8px;margin-bottom:14px;color:#ffd6d6;font-size:13px}
+        .image-count{font-size:12px;color:var(--muted-text);margin-left:8px;align-self:center}
+        .file-list{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+        .file-list-item{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(0,0,0,0.15);border:1px solid rgba(255,255,255,0.06);border-radius:8px;font-size:13px}
+        .file-list-item .fname{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted-text)}
+        .file-remove{background:transparent;border:none;color:rgba(232,107,107,0.7);cursor:pointer;font-size:16px;padding:0 2px;flex-shrink:0}
+        .file-remove:hover{color:rgba(232,107,107,1)}
+        .hint{font-size:12px;color:var(--muted-text);margin-top:4px}
+    </style>
+</head>
+<body>
+    <header>
+        <h1 onclick="location.href='/'">Dodobook</h1>
+    </header>
+
+    <main class="center">
+        <div class="panel">
+            <h2 style="margin-top:0">Create a new post</h2>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% for category, message in messages %}
+                <div class="error-box">{{ message }}</div>
+              {% endfor %}
+            {% endwith %}
+
+            <form id="postForm">
+                <label for="title">Title</label>
+                <input type="text" id="title" name="title" placeholder="Post title" required>
+
+                <label for="subtitle" style="margin-top:8px">Subtitle</label>
+                <input type="text" id="subtitle" name="subtitle" placeholder="Brief description">
+
+                <label for="content" style="margin-top:8px">Content</label>
+                <textarea id="content" name="content" placeholder="What's on your mind?" required></textarea>
+
+                <label style="margin-top:8px">Visibility</label>
+                <select name="visibility" id="visibility">
+                    <option value="public">🌐 Everyone (all members)</option>
+                    <option value="friends">👥 Friends only</option>
+                </select>
+
+                <label style="margin-top:8px">Media</label>
+                <p class="hint">Upload images (shown in carousel) and videos (played inline) — up to 200 MB per file</p>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <input type="file" id="mediaFileInput" accept="image/*,video/*" multiple style="display:none" onchange="addMedia(event)">
+                    <button type="button" class="pill" onclick="document.getElementById('mediaFileInput').click()">+ Add Images / Videos</button>
+                    <span class="image-count" id="mediaCount"></span>
+                </div>
+                <div class="image-upload-area" id="mediaPreviewArea"></div>
+
+                <label style="margin-top:16px">Video Links</label>
+                <p class="hint">Paste YouTube, Vimeo, or other video URLs to embed them in the post</p>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <input type="text" id="videoLinkInput" placeholder="https://www.youtube.com/watch?v=..." style="flex:1" onkeypress="if(event.key==='Enter'){event.preventDefault();addVideoLink()}">
+                    <button type="button" class="pill pill-secondary" style="flex-shrink:0;padding:10px 14px" onclick="addVideoLink()">+ Add</button>
+                </div>
+                <div class="file-list" id="videoLinkList"></div>
+
+                <label style="margin-top:16px">File Attachments</label>
+                <p class="hint">Attach PDFs, documents, archives, etc. (not images or videos)</p>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <input type="file" id="fileInput" multiple style="display:none" onchange="addFiles(event)">
+                    <button type="button" class="pill pill-secondary" onclick="document.getElementById('fileInput').click()">Add Files</button>
+                    <span class="image-count" id="fileCount"></span>
+                </div>
+                <div class="file-list" id="fileListArea"></div>
+
+                <div class="actions-row">
+                    <button type="submit" class="pill">Publish</button>
+                    <button type="button" class="pill pill-secondary" onclick="location.href='/'">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </main>
+    <script>
+        let selectedMedia = [];
+        let selectedFiles = [];
+        let videoLinks = [];
+
+        function addMedia(event) {
+            Array.from(event.target.files).forEach(file => {
+                selectedMedia.push(file);
+                renderMediaPreview(file, selectedMedia.length - 1);
+            });
+            event.target.value = '';
+            updateMediaCount();
+        }
+
+        function renderMediaPreview(file, index) {
+            const area = document.getElementById('mediaPreviewArea');
+            const wrap = document.createElement('div');
+            wrap.className = 'image-preview-wrap';
+            wrap.dataset.index = index;
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'image-remove-btn';
+            removeBtn.textContent = '×';
+            removeBtn.type = 'button';
+            removeBtn.onclick = () => { selectedMedia[index] = null; wrap.remove(); updateMediaCount(); };
+
+            if (file.type.startsWith('image/')) {
+                const img = document.createElement('img');
+                img.className = 'image-preview';
+                img.src = URL.createObjectURL(file);
+                img.alt = file.name;
+                wrap.appendChild(img);
+            } else if (file.type.startsWith('video/')) {
+                const vid = document.createElement('video');
+                vid.src = URL.createObjectURL(file);
+                vid.style.cssText = 'width:100%;height:100%;border-radius:8px;object-fit:cover;background:#000';
+                vid.preload = 'metadata';
+                vid.muted = true;
+                wrap.appendChild(vid);
+            } else {
+                const icon = document.createElement('div');
+                icon.style.cssText = 'width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:22px;background:rgba(0,0,0,0.2);border-radius:8px;gap:4px';
+                icon.innerHTML = '🎬<span style="font-size:10px;color:var(--muted-text);text-align:center;padding:0 4px;overflow:hidden;text-overflow:ellipsis;max-width:90px">' + escapeHtml(file.name) + '</span>';
+                wrap.appendChild(icon);
+            }
+            wrap.appendChild(removeBtn);
+            area.appendChild(wrap);
+        }
+
+        function updateMediaCount() {
+            const imgs = selectedMedia.filter(f => f !== null && f.type.startsWith('image/')).length;
+            const vids = selectedMedia.filter(f => f !== null && f.type.startsWith('video/')).length;
+            const el = document.getElementById('mediaCount');
+            const parts = [];
+            if (imgs) parts.push(`${imgs} image${imgs !== 1 ? 's' : ''}`);
+            if (vids) parts.push(`${vids} video${vids !== 1 ? 's' : ''}`);
+            el.textContent = parts.length ? parts.join(', ') + ' selected' : '';
+        }
+
+        function addVideoLink() {
+            const input = document.getElementById('videoLinkInput');
+            const url = input.value.trim();
+            if (!url || !url.startsWith('http')) { input.focus(); return; }
+            videoLinks.push(url);
+            renderVideoLinkItem(url, videoLinks.length - 1);
+            input.value = '';
+            input.focus();
+        }
+
+        function renderVideoLinkItem(url, index) {
+            const area = document.getElementById('videoLinkList');
+            const item = document.createElement('div');
+            item.className = 'file-list-item';
+            item.dataset.index = index;
+            item.innerHTML = `<span>🎬</span><span class="fname" title="${escapeHtml(url)}">${escapeHtml(url)}</span><button class="file-remove" type="button" title="Remove">×</button>`;
+            item.querySelector('.file-remove').onclick = () => { videoLinks[index] = null; item.remove(); };
+            area.appendChild(item);
+        }
+
+        function addFiles(event) {
+            Array.from(event.target.files).forEach(file => {
+                selectedFiles.push(file);
+                renderFileItem(file, selectedFiles.length - 1);
+            });
+            event.target.value = '';
+            updateFileCount();
+        }
+
+        function renderFileItem(file, index) {
+            const area = document.getElementById('fileListArea');
+            const item = document.createElement('div');
+            item.className = 'file-list-item';
+            item.dataset.index = index;
+            item.innerHTML = `<span>📎</span><span class="fname" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span><button class="file-remove" type="button" title="Remove">×</button>`;
+            item.querySelector('.file-remove').onclick = () => { selectedFiles[index] = null; item.remove(); updateFileCount(); };
+            area.appendChild(item);
+        }
+
+        function updateFileCount() {
+            const count = selectedFiles.filter(f => f !== null).length;
+            document.getElementById('fileCount').textContent = count > 0 ? `${count} file${count !== 1 ? 's' : ''} selected` : '';
+        }
+
+        function escapeHtml(text) {
+            const d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        document.getElementById('postForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const title = document.getElementById('title').value.trim();
+            const content = document.getElementById('content').value.trim();
+            if (!title || !content) {
+                alert('Title and content are required.');
+                return;
+            }
+
+            const submitBtn = this.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Publishing...';
+
+            const formData = new FormData();
+            formData.append('title', title);
+            formData.append('subtitle', document.getElementById('subtitle').value.trim());
+            formData.append('content', content);
+            formData.append('visibility', document.getElementById('visibility').value);
+
+            selectedMedia.filter(f => f !== null).forEach(file => {
+                formData.append('postmedia', file);
+            });
+            selectedFiles.filter(f => f !== null).forEach(file => {
+                formData.append('postfiles', file);
+            });
+            videoLinks.filter(u => u !== null).forEach(url => {
+                formData.append('postvideolinks', url);
+            });
+
+            fetch('/api/posts/create', { method: 'POST', body: formData })
+                .then(r => {
+                    if (r.redirected) {
+                        window.location.href = r.url;
+                    } else {
+                        window.location.href = '/';
+                    }
+                })
+                .catch(() => {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Publish';
+                    alert('Error publishing post.');
+                });
+        });
+    </script>
+</body>
+</html>

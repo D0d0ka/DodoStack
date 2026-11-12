@@ -3,7 +3,17 @@ from urllib.parse import urlencode
 
 from .framework import safe
 
-SERVICE_DESCRIPTIONS = {"todo": "Capture tasks, see what’s left, and mark off what’s done."}
+SERVICE_DESCRIPTIONS = {
+    "todo": "Capture tasks, see what’s left, and mark off what’s done.",
+    "doodle": "Search the web, media, and indexed sites.",
+    "dodobook": "Share posts and chat with friends and groups.",
+    "dodotv": "Browse the catalog and keep track of what you watch.",
+}
+SERVICE_NAMES = {"doodle": "Doodle", "dodobook": "DodoBook", "dodotv": "Dodo TV", "todo": "Todo"}
+
+
+def service_name(key):
+    return SERVICE_NAMES.get(key, key.title())
 
 
 def document(title, body, origin=""):
@@ -37,7 +47,8 @@ def dashboard(user, services, selected):
     selected = selected if selected in services else ""
     if user:
         account = f"""<div class="account">
-  <span class="username">{safe(user["username"])}</span>
+  <a class="username" href="/account/password">{safe(user["username"])}</a>
+  {'<a class="button primary" href="/admin">Admin</a>' if user["is_admin"] else ''}
   <form action="/logout" method="post"><button class="button" type="submit">Sign out</button></form>
 </div>"""
     else:
@@ -49,7 +60,7 @@ def dashboard(user, services, selected):
     tabs = [nav_link("Overview", "/", not selected)]
     cards = []
     for service in services:
-        name = safe(service.title())
+        name = safe(service_name(service))
         tab_url = "/?" + urlencode({"service": service})
         tabs.append(nav_link(name, tab_url, selected == service))
         cards.append(f"""
@@ -60,7 +71,7 @@ def dashboard(user, services, selected):
 </a>""")
 
     if selected:
-        name = safe(selected.title())
+        name = safe(service_name(selected))
         description = safe(SERVICE_DESCRIPTIONS.get(selected, "Open this service with your Dodo account."))
         url = safe(services[selected])
         content = f"""
@@ -113,7 +124,7 @@ def auth_page(mode, error=None, service=None, target="/"):
   <div class="auth-art" aria-hidden="true"><img src="/static/dodo.png" width="190" height="190" alt=""></div>
   <section class="auth-card">
     <h1>{title}</h1>
-    <p>{f'Continue to {safe(service.title())} with your Dodo account.' if service else 'One account for all your Dodo services.'}</p>
+    <p>{f'Continue to {safe(service_name(service))} with your Dodo account.' if service else 'One account for all your Dodo services.'}</p>
     {alert}
     <form method="post" action="/{mode}">
       <input type="hidden" name="service" value="{safe(service or '')}">
@@ -128,6 +139,7 @@ def auth_page(mode, error=None, service=None, target="/"):
     <p class="auth-switch">{'Already have an account?' if signup else 'New to Dodo?'}
       <a href="{safe(other_url)}">{'Sign in' if signup else 'Create an account'}</a>
     </p>
+    {'' if signup else '<p><a href="/forgot-password">Request a password reset</a></p>'}
   </section>
 </main>""")
 
@@ -139,6 +151,93 @@ def sign_in_problem(service, message, service_url, origin):
   <section class="service-detail">
     <h1>Sign-in interrupted</h1>
     <p>{safe(message)}</p>
-    <a class="button primary" href="{safe(service_url)}">Return to {safe(service.title())}</a>
+    <a class="button primary" href="{safe(service_url)}">Return to {safe(service_name(service))}</a>
   </section>
 </main>""", origin=origin)
+
+
+def admin_navigation(tabs, selected=""):
+    links = [nav_link("Accounts", "/admin", selected == "accounts")]
+    links.extend(nav_link(safe(label), url, selected == key) for key, (label, url) in tabs.items())
+    return f"""
+<link rel="stylesheet" href="/static/admin-navigation.css">
+<nav class="dodo-admin-tabs" aria-label="DodoStack administration">
+  <a href="/">DodoStack</a>{''.join(links)}
+</nav>"""
+
+
+def admin_accounts(accounts, tabs, token, message=""):
+    rows = []
+    for account in accounts:
+        username = safe(account["username"])
+        role = "Administrator" if account["is_admin"] else "Member"
+        action = "Remove admin" if account["is_admin"] else "Make admin"
+        enabled = 0 if account["is_admin"] else 1
+        rows.append(f"""
+<section class="service-detail account-row">
+  <h2>{username}</h2><p>{role}</p>
+  {'<p role="status">Password reset requested</p>' if account["password_reset_requested"] else ''}
+  <form method="post" action="/admin/role">
+    <input type="hidden" name="csrf" value="{token}">
+    <input type="hidden" name="username" value="{username}">
+    <button class="button" name="enabled" value="{enabled}">{action}</button>
+  </form>
+  <form method="post" action="/admin/password">
+    <input type="hidden" name="csrf" value="{token}">
+    <input type="hidden" name="username" value="{username}">
+    <label>New password for {username}
+      <input type="password" name="password" autocomplete="new-password" minlength="8" maxlength="255" required>
+    </label>
+    <button class="button" type="submit">Reset password</button>
+  </form>
+</section>""")
+    alert = f'<p role="status">{safe(message)}</p>' if message else ""
+    return document("Administration", f"""
+{header()} {admin_navigation(tabs, "accounts")}
+<main class="workspace">
+  <h1>Accounts</h1>
+  {alert}
+  <div class="service-grid admin-accounts">{''.join(rows)}</div>
+</main>""")
+
+
+def password_page(token, message=""):
+    alert = f'<p role="status">{safe(message)}</p>' if message else ""
+    return document("Change password", f"""
+{header()}
+<main class="auth-layout">
+  <section class="auth-card">
+    <h1>Change password</h1>
+    {alert}
+    <form method="post" action="/account/password">
+      <input type="hidden" name="csrf" value="{token}">
+      <label for="current-password">Current password</label>
+      <input id="current-password" type="password" name="current" autocomplete="current-password" required>
+      <label for="new-password">New password</label>
+      <input id="new-password" type="password" name="password" autocomplete="new-password" minlength="8" maxlength="255" required>
+      <button class="button primary" type="submit">Change password</button>
+    </form>
+  </section>
+</main>""")
+
+
+
+def reset_request_page(submitted):
+    if submitted:
+        content = "<p>If this account exists, its reset request is now visible to a DodoStack administrator.</p>"
+    else:
+        content = """
+<form action="/forgot-password" method="post">
+  <label for="username">DodoStack username</label>
+  <input id="username" name="username" autocomplete="username" maxlength="24" required>
+  <button class="button primary" type="submit">Request reset</button>
+</form>"""
+    return document("Request a password reset", f"""
+{header()}
+<main class="auth-layout">
+  <section class="auth-card">
+    <h1>Request a password reset</h1>
+    {content}
+    <p><a href="/login">Back to sign in</a></p>
+  </section>
+</main>""")

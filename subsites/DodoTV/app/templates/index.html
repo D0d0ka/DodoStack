@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% from "_macros.html" import content_row, empty_state, icon_play, icon_info %}
+{% block title %}{{ site.site_name }} — {{ site.tagline }}{% endblock %}
+
+{% block content %}
+{% if heroes %}
+<section class="hero" data-hero-carousel aria-label="Featured content">
+  {% for hero in heroes %}
+  <div class="hero-slide {% if loop.first %}active{% endif %}" data-hero-slide>
+    <div class="hero-media"{% if hero.image %} style="background-image: url('{{ hero.image }}')"{% endif %}></div>
+    <div class="hero-content">
+      <div class="hero-copy">
+        <span class="eyebrow">{{ hero.badge }} · {{ site.site_name }} Original</span>
+        <h1 class="hero-title">{{ hero.title }}</h1>
+        <div class="hero-meta">
+          {% for part in hero.meta.split(' · ') if part %}
+            <span>{{ part }}</span>
+            {% if not loop.last %}<span class="dot"></span>{% endif %}
+          {% endfor %}
+        </div>
+        {% if hero.description %}<p class="hero-desc">{{ hero.description }}</p>{% endif %}
+        <div class="hero-actions">
+          <a class="btn btn-primary btn-lg" href="{{ hero.watch_url }}" aria-label="Play now — {{ hero.title }}">{{ icon_play() }} Play now</a>
+          <a class="btn btn-ghost btn-lg" href="{{ hero.detail_url }}">{{ icon_info() }} More info<span class="sr-only"> about {{ hero.title }}</span></a>
+          {% if hero.trailer_url %}
+            <button type="button" class="btn btn-ghost btn-lg" data-trailer="{{ hero.trailer_url }}" data-trailer-title="{{ hero.title }}">Watch trailer</button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {% if heroes|length > 1 %}
+  <div class="hero-dots" role="tablist" aria-label="Featured slides">
+    {% for hero in heroes %}
+      <button class="hero-dot {% if loop.first %}active{% endif %}" type="button" role="tab" aria-label="Show {{ hero.title }}" data-hero-dot="{{ loop.index0 }}"></button>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <div class="hero-rail"></div>
+</section>
+{% else %}
+<section class="hero-empty">
+  <div class="container">
+    <div class="hero-empty-copy">
+      <span class="eyebrow">Welcome to Dodo TV</span>
+      <h1>Your next great story starts here.</h1>
+      <p>Dodo TV is ready for its first premiere. Add a movie or build a TV show in the admin studio and it will appear right here.</p>
+      <div class="hero-actions">
+        {% if current_user.is_authenticated and admin_preview %}
+          <a class="btn btn-primary btn-lg" href="{{ url_for('admin.movie_new') }}">{{ icon_play() }} Add your first movie</a>
+          <a class="btn btn-ghost btn-lg" href="{{ url_for('admin.show_new') }}">Create a TV show</a>
+        {% else %}
+          <a class="btn btn-primary btn-lg" href="{{ url_for('main.browse') }}">Browse the catalog</a>
+          {% if not current_user.is_authenticated and allow_registration %}
+            <a class="btn btn-ghost btn-lg" href="{{ url_for('auth.register') }}">Create an account</a>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<div class="container page-section">
+  {% if genres %}
+  <div class="genre-strip reveal">
+    <span class="genre-strip-label">Browse by genre</span>
+    <div class="genre-strip-links">
+      {% for genre in genres[:10] %}
+        <a class="chip" href="{{ url_for('main.browse', genre=genre.slug) }}">{{ genre.name }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if continue_cards %}
+    {{ content_row("Continue watching", continue_cards, "continue", eyebrow="Pick up where you left off") }}
+  {% endif %}
+
+  {% if featured_movies %}
+    {{ content_row("Featured movies", featured_movies, "featured-movies", url_for('main.browse', type='movie'), eyebrow="Handpicked for you") }}
+  {% endif %}
+
+  {% if featured_shows %}
+    {{ content_row("Featured TV shows", featured_shows, "featured-shows", url_for('main.browse', type='show'), eyebrow="Binge-worthy series") }}
+  {% endif %}
+
+  {% if recent_cards %}
+    {{ content_row("Recently added", recent_cards, "recent", url_for('main.browse', sort='recent'), eyebrow="Fresh on Dodo TV") }}
+  {% endif %}
+
+  {% if popular_movie_cards %}
+    {{ content_row("Popular movies", popular_movie_cards, "popular-movies", url_for('main.browse', type='movie'), eyebrow="What everyone is watching") }}
+  {% endif %}
+
+  {% if popular_show_cards %}
+    {{ content_row("Popular TV shows", popular_show_cards, "popular-shows", url_for('main.browse', type='show'), eyebrow="Series people love") }}
+  {% endif %}
+
+  {% if not counts.movies and not counts.shows %}
+    {{ empty_state(
+      "The stage is set",
+      "There is no published content yet. Sign in as an administrator to upload movies, create series and generate preview frames.",
+      url_for('auth.login') if not current_user.is_authenticated else (url_for('admin.dashboard') if admin_preview else None),
+      "Sign in" if not current_user.is_authenticated else ("Open admin studio" if admin_preview else None),
+      "spark"
+    ) }}
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,200 @@
+{% macro icon_play() -%}
+<svg viewBox="0 0 24 24" aria-hidden="true" class="icon-fill"><path d="M8 5.5v13a1 1 0 0 0 1.54.84l10-6.5a1 1 0 0 0 0-1.68l-10-6.5A1 1 0 0 0 8 5.5Z"/></svg>
+{%- endmacro %}
+
+{% macro icon_plus() -%}
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+{%- endmacro %}
+
+{% macro icon_info() -%}
+<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg>
+{%- endmacro %}
+
+{% macro star_svg() -%}
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.62 5.31 5.86.85-4.24 4.13 1 5.84L12 17l-5.24 2.73 1-5.84-4.24-4.13 5.86-.85L12 3.6Z"/></svg>
+{%- endmacro %}
+
+{% macro rating_widget(rating, action_url, sign_in_url, content_label) %}
+<section class="rating-panel" id="rate" aria-labelledby="rating-title">
+  <div class="rating-head">
+    <div>
+      <span class="eyebrow">Audience rating</span>
+      <h2 id="rating-title">Rate this {{ content_label }}</h2>
+    </div>
+    <div class="rating-average">
+      {% if rating.average %}
+        <strong>{{ '%.1f'|format(rating.average) }}</strong>
+        <div class="rating-average-copy">
+          <span class="avg-stars" aria-hidden="true">
+            {% for n in range(1, 6) %}<span class="avg-star{% if n <= rating.average %} is-filled{% endif %}">{{ star_svg() }}</span>{% endfor %}
+          </span>
+          <span>{{ rating.count }} rating{{ '' if rating.count == 1 else 's' }}</span>
+        </div>
+      {% else %}
+        <strong>—</strong>
+        <span class="rating-average-copy">No ratings yet</span>
+      {% endif %}
+    </div>
+  </div>
+  {% if current_user.is_authenticated %}
+  <form class="rating-form" method="post" action="{{ action_url }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <fieldset class="rating-fieldset">
+      <legend class="sr-only">Choose a rating from 1 to 5 stars</legend>
+      <div class="star-buttons">
+        {% for n in range(1, 6) %}
+        <button class="star-button{% if rating.user_score and n <= rating.user_score %} is-active{% endif %}" type="submit" name="score" value="{{ n }}" aria-label="Rate {{ n }} star{{ '' if n == 1 else 's' }}"{% if rating.user_score == n %} aria-pressed="true"{% endif %}>{{ star_svg() }}</button>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <p class="rating-hint">
+      {% if rating.user_score %}You rated this {{ rating.user_score }} out of 5. Choose another star to change it.{% else %}Choose a star to share your score.{% endif %}
+    </p>
+  </form>
+  {% else %}
+  <p class="rating-hint"><a href="{{ sign_in_url }}">Sign in</a> to rate this {{ content_label }}.</p>
+  {% endif %}
+</section>
+{% endmacro %}
+
+{% macro frame_gallery(items, gallery_id, title) %}
+{% if items %}
+<section class="gallery-panel reveal" aria-labelledby="{{ gallery_id }}-title">
+  <div class="gallery-head">
+    <div>
+      <span class="eyebrow">Gallery</span>
+      <h2 id="{{ gallery_id }}-title">{{ title }}</h2>
+    </div>
+    <span class="gallery-count">{{ items|length }} frame{{ '' if items|length == 1 else 's' }}</span>
+  </div>
+  <div class="gallery-grid">
+    {% for item in items %}
+    <button type="button" class="gallery-item" data-gallery-src="{{ item.src }}" data-gallery-caption="{{ item.caption }}" data-gallery-label="{{ item.label }}" data-gallery-index="{{ loop.index0 }}" aria-label="View frame {{ loop.index }} of {{ items|length }}: {{ item.caption }}">
+      <img src="{{ item.src }}" alt="" loading="lazy">
+      <span class="gallery-item-shade" aria-hidden="true"></span>
+      {% if item.label %}<span class="gallery-item-label">{{ item.label }}</span>{% endif %}
+      <span class="gallery-item-zoom" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/></svg>
+      </span>
+    </button>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endmacro %}
+
+{% macro card(item) %}
+<article class="content-card reveal" data-kind="{{ item.kind }}">
+  <div class="card-art">
+    <a class="card-detail-link" href="{{ item.href }}" aria-label="{{ item.title }} details">
+      {% if item.image %}
+        <img src="{{ item.image }}" alt="{{ item.title }} poster" loading="lazy">
+      {% else %}
+        <span class="card-fallback" aria-hidden="true">{{ item.title[:1]|upper }}</span>
+      {% endif %}
+      <span class="card-vignette"></span>
+    </a>
+    <span class="card-badge">{{ item.badge }}</span>
+    <a class="card-play" href="{{ item.watch_href }}" aria-label="Play {{ item.title }}">
+      {{ icon_play() }}
+    </a>
+    {% if item.progress %}
+      <span class="card-progress" aria-hidden="true"><span style="width: {{ item.progress }}%"></span></span>
+    {% endif %}
+  </div>
+  <div class="card-copy">
+    <a href="{{ item.href }}" class="card-title">{{ item.title }}</a>
+    <p class="card-meta">{{ item.meta }}</p>
+    {% if item.resume %}<p class="card-resume">{{ item.resume }}</p>{% endif %}
+  </div>
+</article>
+{% endmacro %}
+
+{% macro content_row(title, cards, row_id, view_all_url=None, eyebrow=None) %}
+{% if cards %}
+<section class="content-row reveal" aria-labelledby="row-{{ row_id }}">
+  <div class="row-head">
+    <div>
+      {% if eyebrow %}<span class="eyebrow">{{ eyebrow }}</span>{% endif %}
+      <h2 id="row-{{ row_id }}">{{ title }}</h2>
+    </div>
+    <div class="row-actions">
+      {% if view_all_url %}<a class="text-link" href="{{ view_all_url }}">Explore all <span aria-hidden="true">→</span></a>{% endif %}
+      <div class="row-arrows">
+        <button type="button" class="scroll-button" data-scroll="-1" aria-label="Scroll left">
+          <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <button type="button" class="scroll-button" data-scroll="1" aria-label="Scroll right">
+          <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="row-scroller" data-scroller>
+    {% for item in cards %}
+      {{ card(item) }}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endmacro %}
+
+{% macro empty_state(title, message, action_url=None, action_label=None, icon='spark') %}
+<div class="empty-state reveal">
+  <div class="empty-icon empty-icon-{{ icon }}" aria-hidden="true">
+    <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M4 9h16M9 5v14"/></svg>
+  </div>
+  <h3>{{ title }}</h3>
+  <p>{{ message }}</p>
+  {% if action_url and action_label %}
+    <a class="btn btn-primary" href="{{ action_url }}">{{ action_label }}</a>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro genre_chips(genres, limit=None) %}
+<div class="genre-chips">
+  {% for genre in (genres[:limit] if limit else genres) %}
+    <span class="chip">{{ genre.name if genre.name is defined else genre }}</span>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro field(field, class_name='', placeholder='') %}
+<div class="field {% if field.errors %}has-error{% endif %}">
+  {{ field.label(class_='field-label') }}
+  {{ field(class_='input ' ~ class_name, placeholder=placeholder) }}
+  {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+</div>
+{% endmacro %}
+
+{% macro checkbox(field, description=None) %}
+<label class="check-field">
+  {{ field() }}
+  <span class="check-ui" aria-hidden="true">
+    <svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg>
+  </span>
+  <span class="check-copy">
+    <span>{{ field.label.text }}</span>
+    {% if description %}<small>{{ description }}</small>{% endif %}
+  </span>
+</label>
+{% endmacro %}
+
+{% macro pagination(page, pages, prev_url, next_url) %}
+{% if pages > 1 %}
+<nav class="pagination" aria-label="Pagination">
+  {% if prev_url %}
+    <a class="btn btn-ghost btn-sm" href="{{ prev_url }}">← Previous</a>
+  {% else %}
+    <span class="btn btn-ghost btn-sm is-disabled">← Previous</span>
+  {% endif %}
+  <span class="page-count">Page {{ page }} of {{ pages }}</span>
+  {% if next_url %}
+    <a class="btn btn-ghost btn-sm" href="{{ next_url }}">Next →</a>
+  {% else %}
+    <span class="btn btn-ghost btn-sm is-disabled">Next →</span>
+  {% endif %}
+</nav>
+{% endif %}
+{% endmacro %}

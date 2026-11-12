@@ -1,0 +1,248 @@
+{% extends "admin/base.html" %}
+{% from "_macros.html" import field, checkbox %}
+{% block title %}{{ 'Edit ' ~ episode.display_code if episode else 'New episode' }}{% endblock %}
+{% block page_title %}{{ (episode.display_code ~ ' · ' ~ episode.title) if episode else 'Add an episode' }}{% endblock %}
+{% block page_sub %}{{ show.title }}{% endblock %}
+
+{% block topbar_actions %}
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.show_edit', show_id=show.id) }}">← {{ show.title }}</a>
+  {% if episode %}
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('main.watch_episode', episode_id=episode.id) }}" target="_blank" rel="noopener">Play episode ↗</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<form method="post" enctype="multipart/form-data" action="{{ url_for('admin.episode_edit', episode_id=episode.id) if episode else url_for('admin.episode_new', show_id=show.id) }}" data-upload-form novalidate>
+  {{ form.hidden_tag() }}
+  <div class="admin-editor-grid">
+    <div>
+      <section class="admin-panel">
+        <div class="admin-section">
+          <h2>Episode details</h2>
+          <p>Choose the season and episode number. Numbering must be unique within a season.</p>
+        </div>
+        {{ field(form.title, placeholder="Episode title") }}
+        {{ field(form.description, placeholder="What happens in this episode?") }}
+        <div class="form-grid">
+          {{ field(form.season_id) }}
+          {{ field(form.number) }}
+          {{ field(form.runtime, placeholder="Leave blank to read from the video") }}
+          <div class="field">
+            <span class="field-label">Visibility</span>
+            {{ checkbox(form.published, 'Episodes need a video before they can be published.') }}
+          </div>
+        </div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="admin-section">
+          <h2>Episode media</h2>
+          <p>Upload the episode video. Preview frames and the runtime are generated automatically.</p>
+        </div>
+
+        {% if episode and episode.video_path %}
+        <div class="current-media">
+          <span class="media-icon">
+            <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3V9Z"/></svg>
+          </span>
+          <div class="current-media-copy">
+            <strong>Current episode video</strong>
+            <span title="{{ episode.video_path }}">{{ episode.video_path }}</span>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="field {% if form.video.errors %}has-error{% endif %}">
+          <label class="file-drop">
+            <input type="file" name="video" accept="video/*">
+            <span class="file-drop-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+            </span>
+            <strong>{{ 'Replace episode video' if episode and episode.video_path else 'Upload episode video' }}</strong>
+            <small class="file-drop-filename" data-empty="No file selected">No file selected</small>
+          </label>
+          {% for error in form.video.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.thumbnail.errors %}has-error{% endif %}">
+          <label class="file-drop">
+            <input type="file" name="thumbnail" accept="image/*" data-image-input="#episode-thumb-preview">
+            <span class="file-drop-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5L5 20"/></svg>
+            </span>
+            <strong>{{ 'Replace episode thumbnail' if episode and episode.thumbnail_path else 'Upload a thumbnail (optional)' }}</strong>
+            <small class="file-drop-filename" data-empty="No file selected">No file selected</small>
+          </label>
+          {% for error in form.thumbnail.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        </div>
+        <p class="field-hint">If no thumbnail is uploaded, choose one of the generated preview frames after saving.</p>
+      </section>
+
+      <div class="form-actions-bar">
+        <button class="btn btn-primary" type="submit">{{ 'Save changes' if episode else 'Create episode' }}</button>
+        <a class="btn btn-ghost" href="{{ url_for('admin.show_edit', show_id=show.id) }}">Cancel</a>
+        <span class="spacer"></span>
+        {% if not episode %}<span class="hint">Preview frames are generated automatically after the upload.</span>{% endif %}
+      </div>
+    </div>
+
+    <aside class="admin-editor-side">
+      <section class="admin-panel">
+        <div class="admin-panel-head">
+          <div>
+            <h2>Thumbnail</h2>
+            <p>Shown in episode lists and the player.</p>
+          </div>
+        </div>
+        <div class="poster-preview">
+          {% if episode and episode.thumbnail_path %}
+            <img id="episode-thumb-preview" src="{{ episode.thumbnail_path|media }}" alt="{{ episode.title }} thumbnail">
+          {% elif show.poster_path %}
+            <img id="episode-thumb-preview" src="{{ show.poster_path|media }}" alt="{{ show.title }} poster">
+          {% else %}
+            <span class="poster-fallback">No image</span>
+          {% endif %}
+          <div>
+            <strong>{{ 'Thumbnail ready' if episode and episode.thumbnail_path else 'Using show poster fallback' }}</strong>
+            <span>Upload artwork or select a generated frame below.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="admin-panel-head">
+          <div>
+            <h2>Series context</h2>
+            <p>Where this episode belongs.</p>
+          </div>
+        </div>
+        <div class="info-row"><span>Series</span><span>{{ show.title }}</span></div>
+        <div class="info-row"><span>Season</span><span>{% if episode %}{{ episode.season.display_title }}{% else %}Choose above{% endif %}</span></div>
+        <div class="info-row"><span>Video</span><span>{{ 'Ready' if episode and episode.video_path else 'Not uploaded' }}</span></div>
+        <div class="info-row"><span>Frames</span><span>{{ frames|length if episode else 0 }}</span></div>
+        <div class="info-row"><span>Subtitles</span><span>{{ episode.subtitles|length if episode else 0 }}</span></div>
+      </section>
+    </aside>
+  </div>
+</form>
+
+{% if episode %}
+<div class="admin-editor-grid" style="margin-top:18px">
+  <div>
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Preview frames</h2>
+          <p>Generated from this episode's video. Pick one to use as its thumbnail.</p>
+        </div>
+        {% if episode.video_path %}
+        <form method="post" action="{{ url_for('admin.episode_generate_frames', episode_id=episode.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-ghost btn-sm" type="submit">{{ 'Regenerate frames' if frames else 'Generate frames' }}</button>
+        </form>
+        {% endif %}
+      </div>
+      {% if frames %}
+      <div class="frame-grid">
+        {% for frame in frames %}
+        <article class="frame-card">
+          <img src="{{ frame.path|media }}" alt="Preview frame at {{ frame.timestamp|duration }}" loading="lazy">
+          <span class="frame-time">{{ frame.timestamp|duration }}</span>
+          <div class="frame-actions">
+            <form method="post" action="{{ url_for('admin.episode_select_frame', episode_id=episode.id, asset_id=frame.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn success" type="submit">Use as thumbnail</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.episode_delete_frame', episode_id=episode.id, asset_id=frame.id) }}" data-confirm="Delete this preview frame?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn danger" type="submit" aria-label="Delete preview frame">×</button>
+            </form>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="frame-empty">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5L5 20"/></svg>
+        <p>{% if episode.video_path %}No preview frames yet. Generate them above.{% else %}Upload an episode video to generate preview frames.{% endif %}</p>
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Subtitles</h2>
+          <p>WebVTT tracks available in the player.</p>
+        </div>
+      </div>
+      {% if episode.subtitles %}
+      <div class="subtitle-list">
+        {% for subtitle in episode.subtitles|sort(attribute='label') %}
+        <div class="subtitle-row">
+          <span class="lang">{{ subtitle.language }}</span>
+          <div class="subtitle-row-copy">
+            <strong>{{ subtitle.label }}</strong>
+            <span>{{ subtitle.file_path }}{% if subtitle.is_default %} · Default track{% endif %}</span>
+          </div>
+          <div class="subtitle-row-actions">
+            {% if not subtitle.is_default %}
+            <form method="post" action="{{ url_for('admin.subtitle_make_default', kind='episode', content_id=episode.id, subtitle_id=subtitle.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn" type="submit">Make default</button>
+            </form>
+            {% endif %}
+            <form method="post" action="{{ url_for('admin.subtitle_delete', kind='episode', content_id=episode.id, subtitle_id=subtitle.id) }}" data-confirm="Delete the “{{ subtitle.label }}” subtitle track?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn danger" type="submit">Delete</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted" style="font-size:.78rem">No subtitle tracks yet. Upload a .vtt file below.</p>
+      {% endif %}
+
+      <form class="subtitle-add" method="post" enctype="multipart/form-data" action="{{ url_for('admin.subtitle_add', kind='episode', content_id=episode.id) }}">
+        {{ subtitle_form.hidden_tag() }}
+        <h3>Add a subtitle track</h3>
+        <div class="subtitle-add-grid">
+          {{ field(subtitle_form.language, placeholder="en") }}
+          {{ field(subtitle_form.label, placeholder="English") }}
+          <div class="field {% if subtitle_form.file.errors %}has-error{% endif %}">
+            <label class="field-label" for="episode-subtitle-file">WebVTT file</label>
+            <input class="input" id="episode-subtitle-file" type="file" name="file" accept=".vtt,text/vtt">
+            {% for error in subtitle_form.file.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+          </div>
+          <div>
+            <label class="check-field" style="padding:10px 12px">
+              {{ subtitle_form.is_default() }}
+              <span class="check-ui" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg></span>
+              <span class="check-copy"><span>Default</span></span>
+            </label>
+          </div>
+          <button class="btn btn-soft btn-sm" type="submit">Add track</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <aside class="admin-editor-side">
+    <section class="admin-panel danger-zone">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Delete episode</h2>
+          <p>Remove this episode and its files.</p>
+        </div>
+      </div>
+      <p>This deletes the video, thumbnail, subtitles and preview frames for {{ episode.display_code }}. Watch history references will also be removed.</p>
+      <form method="post" action="{{ url_for('admin.episode_delete', episode_id=episode.id) }}" data-confirm="Delete episode {{ episode.display_code }} “{{ episode.title }}” and its uploaded files?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-danger btn-block" type="submit">Delete this episode</button>
+      </form>
+    </section>
+  </aside>
+</div>
+{% endif %}
+{% endblock %}

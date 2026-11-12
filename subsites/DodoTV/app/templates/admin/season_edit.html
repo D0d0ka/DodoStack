@@ -1,0 +1,116 @@
+{% extends "admin/base.html" %}
+{% from "_macros.html" import field %}
+{% block title %}Season {{ season.number }} — {{ show.title }}{% endblock %}
+{% block page_title %}{{ show.title }} · {{ season.display_title }}{% endblock %}
+{% block page_sub %}Edit season metadata and manage its episodes{% endblock %}
+
+{% block topbar_actions %}
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.show_edit', show_id=show.id) }}">← Back to {{ show.title }}</a>
+  <a class="btn btn-primary btn-sm" href="{{ url_for('admin.episode_new', show_id=show.id, season_id=season.id) }}">+ Add episode</a>
+{% endblock %}
+
+{% block content %}
+<div class="admin-editor-grid">
+  <div>
+    <section class="admin-panel">
+      <div class="admin-section">
+        <h2>Season details</h2>
+        <p>Season numbering is used to sort episodes and build episode codes.</p>
+      </div>
+      <form method="post" action="{{ url_for('admin.season_edit', show_id=show.id, season_id=season.id) }}" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="form-grid">
+          {{ field(form.number) }}
+          {{ field(form.title, placeholder="e.g. The Signal") }}
+        </div>
+        {{ field(form.description, placeholder="Optional season synopsis…") }}
+        <div class="form-actions-bar">
+          <button class="btn btn-primary" type="submit">Save season</button>
+          <a class="btn btn-ghost" href="{{ url_for('admin.show_edit', show_id=show.id) }}">Cancel</a>
+        </div>
+      </form>
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Episodes in this season</h2>
+          <p>{{ episodes|length }} episode{{ '' if episodes|length == 1 else 's' }}.</p>
+        </div>
+        <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.bulk_upload', show_id=show.id) }}">Bulk upload</a>
+      </div>
+
+      {% if episodes %}
+      <div class="episode-admin-list">
+        {% for episode in episodes %}
+        <div class="episode-admin-row">
+          <div class="episode-admin-thumb">
+            {% if episode.thumbnail_path %}
+              <img src="{{ episode.thumbnail_path|media }}" alt="" loading="lazy">
+            {% elif show.poster_path %}
+              <img src="{{ show.poster_path|media }}" alt="" loading="lazy">
+            {% else %}
+              <span class="card-fallback">{{ episode.number }}</span>
+            {% endif %}
+          </div>
+          <div class="episode-admin-copy">
+            <strong><span class="code">{{ episode.display_code }}</span> · {{ episode.title }}</strong>
+            <span>{{ episode.runtime_display or 'Runtime pending' }} · {{ 'Video ready' if episode.video_path else 'No video' }}</span>
+          </div>
+          <span class="status-badge {{ 'published' if episode.published else 'draft' }}">{{ 'Published' if episode.published else 'Draft' }}</span>
+          <div class="episode-admin-actions">
+            <a class="mini-btn" href="{{ url_for('admin.episode_edit', episode_id=episode.id) }}">Edit</a>
+            <form method="post" action="{{ url_for('admin.episode_toggle_publish', episode_id=episode.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn {{ 'danger' if episode.published else 'success' }}" type="submit">{{ 'Unpublish' if episode.published else 'Publish' }}</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.episode_delete', episode_id=episode.id) }}" data-confirm="Delete episode {{ episode.display_code }} “{{ episode.title }}” and its uploaded files?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn danger" type="submit">Delete</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="admin-empty">
+        <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M10 13l2 1.5L14 13"/></svg>
+        <h3>This season has no episodes</h3>
+        <p>Add an episode individually or upload a batch of videos for this season.</p>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('admin.episode_new', show_id=show.id, season_id=season.id) }}">Add the first episode</a>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+
+  <aside class="admin-editor-side">
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Season overview</h2>
+          <p>Quick facts about this season.</p>
+        </div>
+      </div>
+      <div class="info-row"><span>Season number</span><span>{{ season.number }}</span></div>
+      <div class="info-row"><span>Episodes</span><span>{{ episodes|length }}</span></div>
+      <div class="info-row"><span>Published</span><span>{{ episodes|selectattr('published')|list|length }}</span></div>
+      <div class="info-row"><span>Series</span><span>{{ show.title }}</span></div>
+      <div class="info-row"><span>Created</span><span>{{ season.created_at|timeago }}</span></div>
+    </section>
+
+    <section class="admin-panel danger-zone">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Delete season</h2>
+          <p>Remove this season and its episodes.</p>
+        </div>
+      </div>
+      <p>All {{ episodes|length }} episode(s) in this season will be deleted along with their videos, thumbnails and subtitle files.</p>
+      <form method="post" action="{{ url_for('admin.season_delete', show_id=show.id, season_id=season.id) }}" data-confirm="Delete {{ season.display_title }} and all {{ episodes|length }} episode(s)? Uploaded files will also be deleted.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-danger btn-block" type="submit">Delete this season</button>
+      </form>
+    </section>
+  </aside>
+</div>
+{% endblock %}

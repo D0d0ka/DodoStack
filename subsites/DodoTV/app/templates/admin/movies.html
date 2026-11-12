@@ -1,0 +1,101 @@
+{% extends "admin/base.html" %}
+{% block title %}Movies{% endblock %}
+{% block page_title %}Movies{% endblock %}
+{% block page_sub %}{{ movies|length }} title{{ '' if movies|length == 1 else 's' }} in this view{% endblock %}
+
+{% block topbar_actions %}
+  <a class="btn btn-primary btn-sm" href="{{ url_for('admin.movie_new') }}">+ New movie</a>
+{% endblock %}
+
+{% block content %}
+<form class="admin-filter" method="get" action="{{ url_for('admin.movies') }}">
+  <input class="input" type="search" name="q" value="{{ q }}" placeholder="Search movies by title" aria-label="Search movies" maxlength="100">
+  <select class="input compact" name="status" aria-label="Filter by status">
+    <option value="all" {% if status == 'all' %}selected{% endif %}>All statuses</option>
+    <option value="published" {% if status == 'published' %}selected{% endif %}>Published</option>
+    <option value="draft" {% if status == 'draft' %}selected{% endif %}>Drafts</option>
+  </select>
+  <button class="btn btn-ghost btn-sm" type="submit">Filter</button>
+  {% if q or status != 'all' %}
+    <a class="text-link" href="{{ url_for('admin.movies') }}">Reset</a>
+  {% endif %}
+  <span class="spacer" style="flex:1"></span>
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('main.browse', type='movie') }}" target="_blank" rel="noopener">View public catalog ↗</a>
+</form>
+
+{% if movies %}
+<div class="table-wrap">
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Status</th>
+        <th>Year</th>
+        <th>Runtime</th>
+        <th>Genres</th>
+        <th>Updated</th>
+        <th style="text-align:right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for movie in movies %}
+      <tr>
+        <td>
+          <div class="table-title">
+            <div class="table-thumb">
+              {% if movie.poster_path %}
+                <img src="{{ movie.poster_path|media }}" alt="" loading="lazy">
+              {% else %}
+                <span class="card-fallback">{{ movie.title[:1]|upper }}</span>
+              {% endif %}
+            </div>
+            <div>
+              <strong>{{ movie.title }}</strong>
+              <span>{% if movie.video_path %}Video ready{% else %}No video file{% endif %} · {{ movie.subtitles|length }} subtitle{{ '' if movie.subtitles|length == 1 else 's' }}</span>
+            </div>
+          </div>
+        </td>
+        <td>
+          <span class="status-badge {{ 'published' if movie.published else 'draft' }}">{{ 'Published' if movie.published else 'Draft' }}</span>
+          {% if movie.featured %}<span class="status-badge featured" style="margin-left:4px">Featured</span>{% endif %}
+        </td>
+        <td>{{ movie.release_year or '—' }}</td>
+        <td>{{ movie.runtime_display or '—' }}</td>
+        <td class="muted">{{ movie.genres|map(attribute='name')|join(', ') or '—' }}</td>
+        <td class="muted">{{ movie.updated_at|timeago }}</td>
+        <td>
+          <div class="table-actions">
+            <a class="mini-btn" href="{{ url_for('main.movie_detail', movie_id=movie.id) }}" target="_blank" rel="noopener" title="View public page">View</a>
+            <a class="mini-btn" href="{{ url_for('admin.movie_edit', movie_id=movie.id) }}">Edit</a>
+            <form method="post" action="{{ url_for('admin.movie_toggle_publish', movie_id=movie.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn {{ 'danger' if movie.published else 'success' }}" type="submit">{{ 'Unpublish' if movie.published else 'Publish' }}</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.movie_toggle_feature', movie_id=movie.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn" type="submit" title="Toggle homepage feature">{{ 'Unfeature' if movie.featured else 'Feature' }}</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.movie_delete', movie_id=movie.id) }}" data-confirm="Delete “{{ movie.title }}” and all of its uploaded files? This cannot be undone.">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn danger" type="submit">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="admin-empty">
+  <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 10h4M3 14h4M17 10h4M17 14h4"/></svg>
+  <h3>{% if q or status != 'all' %}No matching movies{% else %}No movies yet{% endif %}</h3>
+  <p>{% if q or status != 'all' %}Try a different search or status filter.{% else %}Upload a video, generate preview frames and publish your first movie.{% endif %}</p>
+  {% if q or status != 'all' %}
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.movies') }}">Clear filters</a>
+  {% else %}
+    <a class="btn btn-primary btn-sm" href="{{ url_for('admin.movie_new') }}">Add a movie</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

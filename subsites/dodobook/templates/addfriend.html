@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/static/facicon.ico">
+    <title>Add Friend - Dodobook</title>
+    <style>
+        :root{--bg:#071428;--panel:#0b2742;--card:#0f3b61;--accent:#1e66b0;--muted:#234a6f;--text:#e6f2ff;--muted-text:#bcd4f2;--online:#37d67a;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
+        html,body{height:100%;margin:0;background: linear-gradient(180deg,var(--bg),#062033 80%);color:var(--text);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+        body{overflow:auto}
+        header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;background:linear-gradient(90deg,rgba(255,255,255,0.02),transparent);backdrop-filter:blur(4px)}
+        header h1{margin:0;cursor:pointer;transition:all 0.2s ease;font-size:18px}
+        header h1:hover{color:var(--accent)}
+        .center{max-width:640px;margin:40px auto;padding:18px}
+        .panel{background:linear-gradient(180deg,var(--panel),var(--card));border-radius:12px;padding:24px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+        input{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(0,0,0,0.15);color:var(--text);transition:all 0.2s ease;box-sizing:border-box}
+        input:focus{outline:none;border-color:var(--accent);background:rgba(30,102,176,0.05)}
+        .pill{background:var(--accent);color:white;border:1px solid var(--accent);padding:8px 12px;border-radius:8px;cursor:pointer;transition:all 0.2s ease;font-weight:500;font-size:13px}
+        .pill:hover{background:rgba(30,102,176,0.8)}
+        .pill-danger{background:transparent;border:1px solid rgba(232,107,107,0.3);color:#ffd6d6}
+        .pill-danger:hover{background:rgba(232,107,107,0.1)}
+        .pill-secondary{background:transparent;border:1px solid rgba(255,255,255,0.1);color:var(--muted-text)}
+        .pill-secondary:hover{background:rgba(255,255,255,0.05);color:var(--text)}
+        .result-item{display:flex;gap:10px;align-items:center;padding:10px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);margin-bottom:8px;transition:all 0.12s ease}
+        .result-item:hover{background:rgba(255,255,255,0.05)}
+        .result-avatar{width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0}
+        .result-info{flex:1}
+        .result-name{font-weight:600;font-size:14px}
+        .result-status{font-size:12px;color:var(--muted-text);margin-top:2px}
+        .section-label{font-size:12px;color:var(--muted-text);margin:16px 0 8px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
+        .friend-request{display:flex;gap:10px;align-items:center;padding:12px;border-radius:8px;background:linear-gradient(180deg,rgba(55,214,122,0.04),transparent);border:1px solid rgba(55,214,122,0.15);margin-bottom:8px}
+        .fr-info{flex:1}
+        .fr-name{font-weight:600}
+        .fr-actions{display:flex;gap:6px}
+        .online-dot{width:8px;height:8px;border-radius:50%;background:var(--online);display:inline-block;margin-right:4px}
+        .back-row{margin-top:16px}
+        .empty-hint{color:var(--muted-text);font-size:13px;padding:8px 0}
+    </style>
+</head>
+<body>
+    <header>
+        <h1 onclick="location.href='/'">Dodobook</h1>
+    </header>
+
+    <main class="center">
+        <div class="panel">
+            <h2 style="margin-top:0">Add a friend</h2>
+            <p style="color:var(--muted-text);margin-top:0;font-size:14px">Search by username or email — results appear as you type.</p>
+
+            <input id="searchInput" placeholder="Search username or email..."
+                   oninput="liveSearch(this.value)" autocomplete="off">
+
+            <div id="searchResults"></div>
+
+            {% if pending_requests %}
+            <div class="section-label">Incoming Friend Requests</div>
+            {% for req in pending_requests %}
+            <div class="friend-request" id="req-{{ req.id }}">
+                {% if req.requester.profile_pic %}
+                    <img class="result-avatar" src="{{ url_for('static', filename=req.requester.profile_pic) }}" alt="{{ req.requester.display_name }}">
+                {% else %}
+                    <img class="result-avatar" src="{{ url_for('static', filename='default-avatar.svg') }}" alt="{{ req.requester.display_name }}">
+                {% endif %}
+                <div class="fr-info">
+                    <div class="fr-name">{{ req.requester.display_name }}</div>
+                    <div style="color:var(--muted-text);font-size:12px">Wants to be your friend</div>
+                </div>
+                <div class="fr-actions">
+                    <button class="pill" onclick="respondRequest({{ req.id }}, 'accept', this)">Accept</button>
+                    <button class="pill pill-danger" onclick="respondRequest({{ req.id }}, 'decline', this)">Decline</button>
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            {% if sent_requests %}
+            <div class="section-label">Sent Friend Requests</div>
+            {% for req in sent_requests %}
+            <div class="friend-request" id="sent-{{ req.id }}" style="border-color:rgba(255,255,255,0.08)">
+                {% if req.addressee.profile_pic %}
+                    <img class="result-avatar" src="{{ url_for('static', filename=req.addressee.profile_pic) }}" alt="{{ req.addressee.display_name }}">
+                {% else %}
+                    <img class="result-avatar" src="{{ url_for('static', filename='default-avatar.svg') }}" alt="{{ req.addressee.display_name }}">
+                {% endif %}
+                <div class="fr-info">
+                    <div class="fr-name">{{ req.addressee.display_name }}</div>
+                    <div style="color:var(--muted-text);font-size:12px">Request pending</div>
+                </div>
+                <div class="fr-actions">
+                    <button class="pill pill-danger" onclick="cancelSentRequest({{ req.id }}, this)">Cancel</button>
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            <div class="back-row">
+                <button class="pill pill-secondary" onclick="location.href='/'">Back</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let searchTimer = null;
+
+        function liveSearch(q) {
+            clearTimeout(searchTimer);
+            const results = document.getElementById('searchResults');
+            if (q.trim().length < 2) {
+                results.innerHTML = '';
+                return;
+            }
+            searchTimer = setTimeout(() => {
+                fetch('/api/friends/search?q=' + encodeURIComponent(q.trim()))
+                    .then(r => r.json())
+                    .then(data => {
+                        results.innerHTML = '';
+                        if (!data.users.length) {
+                            results.innerHTML = '<div class="empty-hint">No users found.</div>';
+                            return;
+                        }
+                        data.users.forEach(u => results.appendChild(buildResultItem(u)));
+                    });
+            }, 280);
+        }
+
+        function buildResultItem(u) {
+            const div = document.createElement('div');
+            div.className = 'result-item';
+            div.id = 'user-' + u.id;
+
+            let action = '';
+            if (u.friendship_status === 'friends') {
+                action = '<span style="color:var(--muted-text);font-size:12px;flex-shrink:0">Already friends</span>';
+            } else if (u.friendship_status === 'sent') {
+                action = `<button class="pill pill-secondary" style="flex-shrink:0" onclick="cancelRequest(${u.friendship_id}, this)">Cancel request</button>`;
+            } else if (u.friendship_status === 'received') {
+                action = `<button class="pill" style="flex-shrink:0" onclick="respondRequest(${u.friendship_id}, 'accept', this)">Accept</button>`;
+            } else {
+                action = `<button class="pill" style="flex-shrink:0" onclick="sendRequest(${u.id}, this)">Add friend</button>`;
+            }
+
+            div.innerHTML = `
+                <img class="result-avatar" src="${u.profile_pic}" alt="${escapeHtml(u.username)}">
+                <div class="result-info">
+                    <div class="result-name">${escapeHtml(u.username)}</div>
+                </div>
+                ${action}
+            `;
+            return div;
+        }
+
+        function cancelRequest(friendshipId, btn) {
+            btn.disabled = true;
+            fetch('/api/friends/cancel/' + friendshipId, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        liveSearch(document.getElementById('searchInput').value);
+                    } else {
+                        btn.disabled = false;
+                        alert(data.message || 'Error.');
+                    }
+                });
+        }
+
+        function cancelSentRequest(friendshipId, btn) {
+            btn.disabled = true;
+            fetch('/api/friends/cancel/' + friendshipId, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('sent-' + friendshipId)?.remove();
+                    } else {
+                        btn.disabled = false;
+                        alert(data.message || 'Error.');
+                    }
+                });
+        }
+
+        function sendRequest(userId, btn) {
+            btn.disabled = true;
+            fetch('/api/friends/request', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({user_id: userId})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    btn.textContent = 'Sent!';
+                } else {
+                    btn.disabled = false;
+                    alert(data.message || 'Error sending request.');
+                }
+            });
+        }
+
+        function respondRequest(friendshipId, action, btn) {
+            fetch('/api/friends/respond', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({friendship_id: friendshipId, action: action})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    const item = document.getElementById('req-' + friendshipId);
+                    if (item) item.remove();
+                    if (action === 'accept') location.reload();
+                }
+            });
+        }
+
+        function escapeHtml(text) {
+            const d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+    </script>
+</body>
+</html>

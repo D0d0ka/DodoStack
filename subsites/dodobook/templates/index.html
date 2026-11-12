@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/static/facicon.ico">
+    <title>Dodobook</title>
+    <style>
+        :root{
+            --bg: #071428;
+            --panel: #0b2742;
+            --card: #0f3b61;
+            --accent: #1e66b0;
+            --muted: #234a6f;
+            --text: #e6f2ff;
+            --muted-text: #bcd4f2;
+            --online: #37d67a;
+            font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+        }
+        html,body{height:100%;margin:0;background: linear-gradient(180deg,var(--bg),#062033 80%);color:var(--text);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+        body{overflow:hidden}
+        header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;background:linear-gradient(90deg,rgba(255,255,255,0.02),transparent);backdrop-filter:blur(4px)}
+        header h1{font-size:18px;margin:0}
+        header .actions{display:flex;gap:10px;align-items:center}
+        header button{background:var(--panel);border:1px solid rgba(255,255,255,0.03);color:var(--text);padding:8px 12px;border-radius:8px;cursor:pointer}
+        .container{display:grid;grid-template-columns:240px 1fr 320px;gap:18px;padding:18px;max-width:1200px;margin:0 auto;width:calc(100% - 40px);flex:1;overflow:hidden}
+        @media (max-width:1000px){.container{grid-template-columns:200px 1fr 260px}}
+        @media (max-width:820px){.container{grid-template-columns:1fr;grid-auto-rows:min-content}}
+
+        .panel{background:linear-gradient(180deg,var(--panel),var(--card));border-radius:12px;padding:14px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+        #friends.panel,#chat.panel{display:flex;flex-direction:column;overflow:hidden;height:100%}
+        .panel::-webkit-scrollbar{width:8px;height:8px}
+        .panel::-webkit-scrollbar-track{background:transparent;border-radius:8px}
+        .panel::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.06);border-radius:8px;border:2px solid transparent;background-clip:padding-box;transition:background .15s}
+        .panel::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.12)}
+        *{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.06) transparent}
+        #friends,#chat,#friends .list,.chat-window,#feed{overflow-x:hidden}
+
+        /* Friends left panel */
+        #friends h2{margin:0 0 10px 0;color:var(--muted-text)}
+        .friend{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);cursor:pointer;transition:all .12s ease;border:1px solid transparent}
+        .friend:hover{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.08)}
+        .friend.active{background:var(--accent);color:white}
+        .friend img,.group img{width:40px;height:40px;border-radius:8px;object-fit:cover}
+        .friend .meta{display:flex;flex-direction:column}
+        .friend .name,.group .name{font-weight:600}
+        .status{font-size:12px;color:var(--muted-text);display:flex;align-items:center;gap:8px}
+        .dot{width:10px;height:10px;background:var(--online);border-radius:50%}
+
+        /* Feed center */
+        #feed{display:flex;flex-direction:column;gap:14px;overflow-y:auto;height:100%;padding-right:6px}
+        #feed::-webkit-scrollbar{width:6px}
+        #feed::-webkit-scrollbar-track{background:transparent}
+        #feed::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:3px}
+        .post{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.02)}
+        .post h1{font-size:16px;margin:0 0 6px}
+        .post h2{font-size:14px;margin:0 0 8px;color:var(--muted-text)}
+        .post p{margin:0 0 8px;color:var(--text)}
+        .post .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+        .pill{background:transparent;border:1px solid rgba(255,255,255,0.03);padding:6px 10px;border-radius:999px;color:var(--muted-text);cursor:pointer;transition:all 0.12s ease;display:flex;align-items:center;gap:6px}
+        .pill:hover{background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.08);color:var(--text)}
+        .pill.liked{color:var(--online)}
+        .like-count{font-size:12px;color:var(--muted-text)}
+        .comments-dropdown{position:relative;display:inline-block}
+        .comments-list{position:absolute;top:100%;left:0;background:linear-gradient(180deg,var(--panel),var(--card));border:1px solid rgba(255,255,255,0.08);border-radius:8px;min-width:300px;max-height:400px;overflow-y:auto;display:none;z-index:100;margin-top:4px;padding:0;box-shadow:0 8px 24px rgba(0,0,0,0.3)}
+        .comments-list.show{display:block}
+        .comment-input-container{padding:12px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;gap:8px}
+        .comment-input-container input{flex:1;padding:8px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:rgba(0,0,0,0.2);color:var(--text);font-size:12px}
+        .comment-input-container input::placeholder{color:var(--muted-text)}
+        .comment-input-container button{padding:8px 12px;border-radius:6px;border:1px solid rgba(30,102,176,0.3);background:rgba(30,102,176,0.15);color:#5eb3f6;cursor:pointer;font-size:12px;transition:all 0.12s ease;font-weight:500}
+        .comment-input-container button:hover{background:rgba(30,102,176,0.25);border-color:rgba(30,102,176,0.5)}
+        .comments-items{padding:8px 0}
+        .comment-item{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:13px}
+        .comment-item:last-child{border-bottom:none}
+        .comment-author{color:var(--accent);font-weight:600;font-size:12px}
+        .comment-text{color:var(--text);margin-top:4px}
+        .post-image-carousel{position:relative;width:100%;border-radius:8px;margin:12px 0;overflow:hidden;background:rgba(0,0,0,0.3);cursor:grab}
+        .post-image-carousel:active{cursor:grabbing}
+        .carousel-container{position:relative;width:100%;height:300px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+        .carousel-image{max-width:100%;max-height:100%;display:none;border-radius:8px;object-fit:cover;cursor:grab;user-select:none;transition:transform 0.1s ease-out}
+        .carousel-image:first-child{display:block}
+        .carousel-nav{position:absolute;top:50%;transform:translateY(-50%);width:40px;height:40px;background:rgba(0,0,0,0.5);border:none;color:white;font-size:20px;cursor:pointer;border-radius:50%;transition:all .2s ease;display:flex;align-items:center;justify-content:center}
+        .carousel-nav:hover{background:rgba(0,0,0,0.7)}
+        .carousel-prev{left:8px}
+        .carousel-next{right:8px}
+        .carousel-info{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.6);color:white;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:500}
+
+        /* Chat right panel */
+        #chat{display:flex;flex-direction:column;overflow:hidden}
+        .chat-window{display:flex;flex-direction:column;gap:10px;overflow-y:auto;padding-right:6px;flex:1}
+        .message{display:flex;gap:8px;align-items:flex-start}
+        .message.me{justify-content:flex-end}
+        .bubble{max-width:78%;padding:10px;border-radius:12px;background:var(--muted);color:var(--text);overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap;line-height:1.5}
+        .bubble.me{background:linear-gradient(90deg,var(--accent),#2a86d1);color:white}
+        .bubble a{color:inherit;text-decoration:underline;overflow-wrap:anywhere;word-break:break-word}
+        .bubble iframe{max-width:100%}
+        .system-message{text-align:center;color:var(--muted-text);font-size:12px;padding:4px 0;width:100%;font-style:italic;overflow-wrap:anywhere;word-break:break-word}
+        .chat-input{margin-top:8px;display:flex;gap:8px;flex-shrink:0;align-items:center}
+        .chat-input input{flex:1;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:rgba(0,0,0,0.15);color:var(--text)}
+        .chat-input input:focus{outline:none;border-color:var(--accent)}
+        .chat-empty{display:flex;align-items:center;justify-content:center;flex:1;color:var(--muted-text);font-size:14px;text-align:center;padding:20px}
+        .attached-file{margin-top:6px}
+        .attached-file img{max-width:200px;border-radius:6px;display:block;cursor:pointer}
+        .file-card{display:flex;align-items:center;gap:10px;margin-top:6px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 10px;max-width:260px}
+        .file-card-icon{font-size:22px;flex-shrink:0;line-height:1}
+        .file-card-info{flex:1;min-width:0}
+        .file-card-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+        .file-card-type{font-size:11px;color:var(--muted-text);text-transform:uppercase;margin-top:2px}
+        .file-card-dl{padding:4px 8px;border-radius:6px;border:1px solid rgba(30,102,176,0.4);background:rgba(30,102,176,0.15);color:#5eb3f6;cursor:pointer;font-size:12px;text-decoration:none;flex-shrink:0;transition:all .12s}
+        .file-card-dl:hover{background:rgba(30,102,176,0.3)}
+        .yt-embed{margin:10px 0;border-radius:8px;overflow:hidden;aspect-ratio:16/9}
+        .yt-embed iframe{width:100%;height:100%;border:0}
+        .post-video{width:100%;border-radius:8px;display:block;margin:10px 0;max-height:480px;background:#000}
+        .video-link-fallback{margin:8px 0;padding:8px 12px;background:rgba(0,0,0,0.15);border:1px solid rgba(255,255,255,0.06);border-radius:8px;font-size:13px}
+        .video-link-fallback a{color:var(--accent)}
+        .post-files{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+        .post-file-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:8px}
+        .post-file-row a{color:#5eb3f6;font-size:13px;text-decoration:none;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .post-file-row a:hover{text-decoration:underline}
+        #attached-file-preview{font-size:12px;color:var(--muted-text);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        #attached-file-preview img{max-width:60px;border-radius:4px}
+
+        h1,h2{margin:0}
+        .muted{color:var(--muted-text)}
+        .panel-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+        .panel-header .title{font-weight:700;font-size:14px}
+        .chat-header{padding:6px 0}
+        .leave-btn{background:transparent;border:1px solid rgba(255,255,255,0.03);padding:6px 10px;border-radius:8px;color:var(--muted-text);cursor:pointer;transition:all .12s ease}
+        .leave-btn:hover{background:rgba(232,107,107,0.08);border-color:rgba(232,107,107,0.18);color:#ffd6d6}
+        .invite-btn{background:rgba(30,102,176,0.15);border:1px solid rgba(30,102,176,0.3);padding:6px 12px;border-radius:8px;color:#5eb3f6;cursor:pointer;transition:all .12s ease;font-weight:500}
+        .invite-btn:hover{background:rgba(30,102,176,0.25);border-color:rgba(30,102,176,0.5);color:#7cc9ff}
+        .unread-badge{background:var(--accent);color:white;border-radius:999px;font-size:11px;font-weight:700;padding:1px 6px;margin-left:auto;flex-shrink:0}
+        .system-message{text-align:center;color:var(--muted-text);font-size:12px;padding:4px 0;width:100%;font-style:italic}
+        .member-item{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);margin-bottom:6px}
+        .member-item img{width:32px;height:32px;border-radius:6px;object-fit:cover}
+        .member-name{flex:1;font-size:14px}
+        .member-badge{font-size:11px;color:var(--accent);padding:2px 6px;border-radius:999px;background:rgba(30,102,176,0.12);border:1px solid rgba(30,102,176,0.2)}
+        .kick-btn{padding:4px 10px;border-radius:6px;border:1px solid rgba(232,107,107,0.3);background:rgba(232,107,107,0.1);color:#ffd6d6;cursor:pointer;font-size:11px;transition:all 0.12s ease}
+        .kick-btn:hover{background:rgba(232,107,107,0.25)}
+        .tabs{display:flex;gap:8px}
+        .tab{padding:6px 10px;border-radius:8px;background:transparent;border:1px solid transparent;color:var(--muted-text);cursor:pointer}
+        .tab.active{background:linear-gradient(90deg,rgba(255,255,255,0.02),transparent);border-color:rgba(255,255,255,0.04);color:var(--text)}
+        .search{margin:8px 0}
+        .search input{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text);box-sizing:border-box}
+        .search input:focus{outline:none;border-color:var(--accent)}
+        .chats-list,.list{display:flex;flex-direction:column;gap:10px}
+        .group{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.015),transparent);cursor:pointer;transition:all .12s ease;border:1px solid transparent}
+        .group:hover{background:linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02));border-color:rgba(255,255,255,0.08)}
+        .group.active{background:var(--accent)}
+        .group-invitation{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.015),transparent);border:1px solid rgba(30,102,176,0.2)}
+        .friend-invitation{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.015),transparent);border:1px solid rgba(55,214,122,0.2)}
+        .friend-invitation img,.group-invitation img{width:40px;height:40px;border-radius:8px;object-fit:cover}
+        .invitation-actions{display:flex;gap:6px;margin-top:6px}
+        .action-buttons{display:flex;gap:8px;margin-top:12px}
+        .badge{background:rgba(30,102,176,0.12);color:var(--accent);padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid rgba(30,102,176,0.08);margin-left:8px}
+        .invitation-label{color:var(--online);font-weight:600;font-size:13px;margin:0 0 4px 0}
+        .inv-label-group{color:#5eb3f6}
+        .chat-avatar-wrapper{position:relative;display:inline-block}
+        .chat-avatar-wrapper img{display:block}
+        #friends .list{flex:1;overflow-y:auto;padding-right:6px}
+
+        /* User dropdown */
+        .user-options-container{position:relative;display:inline-block}
+        .user-dropdown{position:absolute;top:100%;right:0;background:rgba(30,30,35,0.95);border:1px solid rgba(255,255,255,0.1);border-radius:8px;min-width:200px;margin-top:8px;display:none;z-index:1000;box-shadow:0 8px 24px rgba(0,0,0,0.4)}
+        .user-dropdown.show{display:block}
+        .user-dropdown a,.user-dropdown button{display:block;width:100%;padding:12px 16px;background:none;border:none;color:var(--text);text-align:left;cursor:pointer;transition:all 0.12s ease;font-size:14px;text-decoration:none;box-sizing:border-box}
+        .user-dropdown a:hover,.user-dropdown button:hover{background:rgba(255,255,255,0.08);color:var(--accent)}
+        .user-dropdown a:first-child,.user-dropdown button:first-child{border-radius:8px 8px 0 0}
+        .user-dropdown a:last-child,.user-dropdown button:last-child{border-radius:0 0 8px 8px}
+        .user-dropdown .divider{height:1px;background:rgba(255,255,255,0.05);margin:4px 0}
+
+        /* Invite modal */
+        .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);backdrop-filter:blur(2px);z-index:1000;align-items:center;justify-content:center}
+        .modal.active{display:flex}
+        .modal-content{background:linear-gradient(180deg,var(--panel),var(--card));border-radius:12px;padding:24px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 10px 40px rgba(2,6,23,0.8);max-width:400px;width:90%;max-height:80vh;overflow-y:auto}
+        .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+        .modal-header h3{margin:0}
+        .close-btn{background:transparent;border:none;color:var(--text);font-size:24px;cursor:pointer;padding:0;line-height:1}
+        .close-btn:hover{color:var(--accent)}
+        .invite-friend-item{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);margin-bottom:6px;cursor:pointer;transition:all 0.12s ease;border:1px solid transparent}
+        .invite-friend-item:hover{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.08)}
+        .invite-friend-item img{width:32px;height:32px;border-radius:6px;object-fit:cover}
+        .invite-friend-name{flex:1;font-size:14px}
+        .invite-friend-btn{padding:6px 12px;border-radius:6px;border:1px solid rgba(30,102,176,0.3);background:rgba(30,102,176,0.15);color:#5eb3f6;cursor:pointer;font-size:12px;transition:all 0.12s ease}
+        .invite-friend-btn:hover{background:rgba(30,102,176,0.25)}
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Welcome to Dodobook</h1>
+        <div class="actions">
+            <button id="make-post">Make a post</button>
+            <div class="user-options-container">
+                <button id="user-options" title="Profile">
+                    {% if current_user.profile_pic %}
+                        <img src="{{ url_for('static', filename=current_user.profile_pic) }}" alt="{{ current_user.username }}" style="width:28px;height:28px;border-radius:6px;object-fit:cover">
+                    {% else %}
+                        <img src="{{ url_for('static', filename='default-avatar.svg') }}" alt="{{ current_user.username }}" style="width:28px;height:28px;border-radius:6px">
+                    {% endif %}
+                </button>
+                <div id="user-dropdown" class="user-dropdown">
+                    <a href="/profile">User settings</a>
+                    <a href="/makeapost">Make a post</a>
+                    <div class="divider"></div>
+                    <form method="post" action="/logout"><button type="submit">Sign out</button></form>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Left: Chats & Friends -->
+        <aside id="friends" class="panel">
+            <div class="panel-header">
+                <div class="title">Chats & Friends</div>
+                <div class="action-buttons" style="display:flex;gap:6px">
+                    <button id="add-friend" class="pill" style="font-size:12px">Add Friend</button>
+                    <button id="create-group" class="pill" style="font-size:12px">Create Group</button>
+                </div>
+            </div>
+
+            <div class="search"><input id="listSearch" placeholder="Search chats or friends..."></div>
+
+            <div class="list" id="mainList">
+                {% for req in pending_requests %}
+                <div class="friend-invitation" id="freq-{{ req.id }}">
+                    {% if req.requester.profile_pic %}
+                        <img src="{{ url_for('static', filename=req.requester.profile_pic) }}" alt="{{ req.requester.username }}">
+                    {% else %}
+                        <img src="{{ url_for('static', filename='default-avatar.svg') }}" alt="{{ req.requester.username }}">
+                    {% endif %}
+                    <div class="meta">
+                        <h5 class="invitation-label">Friend Invitation</h5>
+                        <div class="name">{{ req.requester.username }}</div>
+                        <div class="invitation-actions">
+                            <button class="pill" onclick="respondFriendReq({{ req.id }}, 'accept', this)">Accept</button>
+                            <button class="pill" onclick="respondFriendReq({{ req.id }}, 'decline', this)">Decline</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% for inv in group_invitations %}
+                <div class="group-invitation" id="ginv-{{ inv.id }}">
+                    {% if inv.group.image %}
+                        <img src="{{ url_for('static', filename=inv.group.image) }}" alt="{{ inv.group.name }}">
+                    {% else %}
+                        <img src="{{ url_for('static', filename='default-group.svg') }}" alt="{{ inv.group.name }}">
+                    {% endif %}
+                    <div class="meta">
+                        <h5 class="invitation-label inv-label-group">Group Invitation</h5>
+                        <div class="name">{{ inv.group.name }}</div>
+                        <div class="invitation-actions">
+                            <button class="pill" onclick="respondGroupInv({{ inv.group_id }}, 'accept', this)">Accept</button>
+                            <button class="pill" onclick="respondGroupInv({{ inv.group_id }}, 'decline', this)">Decline</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% for friend in friends %}
+                <div class="friend list-item" data-id="{{ friend.id }}" data-type="direct" data-name="{{ friend.display_name }}"
+                     onclick="openChat('direct', {{ friend.id }}, this)">
+                    <img src="{{ friend.profile_pic_url() }}" alt="{{ friend.display_name }}">
+                    <div class="meta">
+                        <div class="name">{{ friend.display_name }}</div>
+                        <div class="status" id="online-status-{{ friend.id }}">
+                            {% if friend.is_online %}
+                            <span class="dot"></span><span>Online</span>
+                            {% else %}
+                            <span class="muted-text" style="color:var(--muted-text)">Offline</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% for group in groups %}
+                <div class="group list-item" data-id="{{ group.id }}" data-type="group" data-name="{{ group.name }}"
+                     onclick="openChat('group', {{ group.id }}, this)">
+                    {% if group.image %}
+                        <img src="{{ url_for('static', filename=group.image) }}" alt="{{ group.name }}">
+                    {% else %}
+                        <img src="{{ url_for('static', filename='default-group.svg') }}" alt="{{ group.name }}">
+                    {% endif %}
+                    <div class="meta">
+                        <div class="name">{{ group.name }}</div>
+                        <div class="status muted">Group</div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% if not friends and not groups and not pending_requests and not group_invitations %}
+                <div style="color:var(--muted-text);font-size:13px;padding:8px">
+                    Add friends to start chatting!
+                </div>
+                {% endif %}
+            </div>
+        </aside>
+
+        <!-- Center: Feed -->
+        <section id="feed">
+            <div class="panel">
+                <h2 class="muted">Posts:</h2>
+            </div>
+
+            {% for item in post_data %}
+            <article class="post panel" id="post-{{ item.post.id }}">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                    {% if item.post.author.profile_pic %}
+                        <img src="{{ url_for('static', filename=item.post.author.profile_pic) }}" alt="{{ item.post.author.username }}" style="width:32px;height:32px;border-radius:8px;object-fit:cover">
+                    {% else %}
+                        <img src="{{ url_for('static', filename='default-avatar.svg') }}" alt="{{ item.post.author.username }}" style="width:32px;height:32px;border-radius:8px">
+                    {% endif %}
+                    <div class="muted" style="font-size:12px">Posted by {{ item.post.author.username }}</div>
+                    {% if item.post.visibility == 'friends' %}
+                    <span style="font-size:11px;padding:2px 7px;border-radius:999px;background:rgba(30,102,176,0.12);color:var(--muted-text);border:1px solid rgba(30,102,176,0.2);margin-left:auto">👥 Friends only</span>
+                    {% else %}
+                    <span style="font-size:11px;padding:2px 7px;border-radius:999px;background:rgba(55,214,122,0.08);color:var(--muted-text);border:1px solid rgba(55,214,122,0.2);margin-left:auto">🌐 Public</span>
+                    {% endif %}
+                </div>
+                <h1>{{ item.post.title }}</h1>
+                {% if item.post.subtitle %}
+                <h2 class="muted">{{ item.post.subtitle }}</h2>
+                {% endif %}
+
+                {% set post_images = item.post.images.all() %}
+                {% if post_images %}
+                <div class="post-image-carousel" data-carousel="carousel{{ item.post.id }}">
+                    <div class="carousel-container">
+                        {% for img in post_images %}
+                        <img src="{{ url_for('static', filename=img.filename) }}"
+                             alt="Post image"
+                             class="carousel-image"
+                             {% if not loop.first %}style="display:none"{% endif %}>
+                        {% endfor %}
+                        {% if post_images | length > 1 %}
+                        <button class="carousel-nav carousel-prev" onclick="carouselPrev('carousel{{ item.post.id }}')">‹</button>
+                        <button class="carousel-nav carousel-next" onclick="carouselNext('carousel{{ item.post.id }}')">›</button>
+                        {% endif %}
+                        <div class="carousel-info">
+                            <span class="carousel-current">1</span>/<span class="carousel-total">{{ post_images | length }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if item.post.content %}
+                <p>{{ item.post.content | post_content }}</p>
+                {% endif %}
+
+                {% set post_files = item.post.attachments.all() %}
+                {% if post_files %}
+                <div class="post-files">
+                    {% for pf in post_files %}
+                    {% if pf.media_type == 'video' %}
+                    <div style="margin:8px 0">
+                        <video class="post-video" controls>
+                            <source src="{{ url_for('static', filename=pf.file_path) }}">
+                        </video>
+                        <div style="font-size:12px;color:var(--muted-text);margin-top:2px">{{ pf.file_name }}</div>
+                    </div>
+                    {% else %}
+                    <div class="post-file-row">
+                        <span style="font-size:18px">📎</span>
+                        <a href="{{ url_for('static', filename=pf.file_path) }}"
+                           download="{{ pf.file_name }}">{{ pf.file_name }}</a>
+                        <a href="{{ url_for('static', filename=pf.file_path) }}"
+                           download="{{ pf.file_name }}"
+                           class="file-card-dl" style="flex-shrink:0">⬇ Download</a>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% set post_video_links = item.post.video_links.all() %}
+                {% if post_video_links %}
+                <div class="post-video-links">
+                    {% for pvl in post_video_links %}
+                    {{ pvl.url | video_embed }}
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="actions">
+                    <button class="pill like-btn {% if item.user_liked %}liked{% endif %}"
+                            onclick="toggleLike({{ item.post.id }}, this)">
+                        👍 <span class="like-count">{{ item.like_count }}</span>
+                    </button>
+                    <div class="comments-dropdown">
+                        <button class="pill" onclick="toggleComments(this)">💬 Comment</button>
+                        <div class="comments-list">
+                            <div class="comment-input-container">
+                                <input type="text" placeholder="Write a comment..."
+                                       onkeypress="handleCommentKeypress(event, this, {{ item.post.id }})">
+                                <button onclick="submitComment(this, {{ item.post.id }})">Post</button>
+                            </div>
+                            <div class="comments-items">
+                                {% for comment in item.post.comments %}
+                                <div class="comment-item">
+                                    <div class="comment-author">{{ comment.author.username }}</div>
+                                    <div class="comment-text">{{ comment.text }}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </article>
+            {% else %}
+            <div class="panel" style="color:var(--muted-text);font-size:14px;text-align:center;padding:32px">
+                No posts yet. Add friends or make a post to get started!
+            </div>
+            {% endfor %}
+        </section>
+
+        <!-- Right: Chat -->
+        <aside id="chat" class="panel">
+            <div class="panel-header chat-header">
+                <div class="title" id="chatTitle">Select a chat</div>
+                <div style="display:flex;gap:8px;align-items:center" id="chatActions" style="display:none">
+                    <button class="pill leave-btn" id="leaveChatBtn" style="display:none" onclick="leaveCurrentChat()">Leave group</button>
+                    <button class="pill leave-btn" id="unfriendBtn" style="display:none" onclick="unfriendCurrentChat()">Unfriend</button>
+                    <button class="pill invite-btn" id="membersBtn" style="display:none" onclick="openMembersModal()">Members</button>
+                    <button class="pill invite-btn" id="inviteBtn" style="display:none" onclick="openInviteModal()">Invite</button>
+                </div>
+            </div>
+
+            <div class="chat-window" id="chatWindow">
+                <div class="chat-empty">Select a friend or group to start chatting</div>
+            </div>
+
+            <div class="chat-input">
+                <input type="file" id="chat-file-input" style="display:none" onchange="handleFileSelect(event)">
+                <button class="pill attach-btn" onclick="document.getElementById('chat-file-input').click()" style="padding:8px 10px">📎</button>
+                <span id="attached-file-preview"></span>
+                <input type="text" placeholder="Type a message..." id="chat-input-field" onkeypress="handleChatKeypress(event)">
+                <button class="pill" id="chat-send-btn" onclick="sendChatMessage()" style="padding:8px 12px">Send</button>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Invite to Group Modal -->
+    <div class="modal" id="inviteModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Invite to Group</h3>
+                <button class="close-btn" onclick="closeInviteModal()">&times;</button>
+            </div>
+            <input id="inviteSearchInput" placeholder="Search by username or email..."
+                   oninput="searchInviteUsers(this.value)"
+                   style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(0,0,0,0.2);color:var(--text);font-size:13px;box-sizing:border-box;margin-bottom:10px">
+            <div id="inviteSearchResults"></div>
+            <div id="inviteFriendsSection">
+                <div style="font-size:12px;color:var(--muted-text);margin:8px 0 6px">Suggested friends</div>
+                <div id="inviteFriendsList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Group Members Modal -->
+    <div class="modal" id="membersModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Group Members</h3>
+                <button class="close-btn" onclick="closeMembersModal()">&times;</button>
+            </div>
+            <div id="membersList"></div>
+        </div>
+    </div>
+
+    <script>
+        // ── Current user info ─────────────────────────────────────────────────
+        const CURRENT_USER_ID = {{ current_user.id }};
+
+        // ── Chat state ────────────────────────────────────────────────────────
+        let activeChatType = null;
+        let activeChatId = null;
+        let lastMessageId = 0;
+        let chatRevision = 0;
+        let chatPoll = null;
+        let pollingInterval = null;
+        let selectedFile = null;
+
+        // ── User dropdown ─────────────────────────────────────────────────────
+        const userOptionsBtn = document.getElementById('user-options');
+        const userDropdown = document.getElementById('user-dropdown');
+
+        userOptionsBtn.addEventListener('click', () => userDropdown.classList.toggle('show'));
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.user-options-container')) userDropdown.classList.remove('show');
+        });
+
+
+        // ── Navigation buttons ─────────────────────────────────────────────────
+        document.getElementById('make-post').addEventListener('click', () => location.href = '/makeapost');
+        document.getElementById('add-friend').addEventListener('click', () => location.href = '/addfriend');
+        document.getElementById('create-group').addEventListener('click', () => location.href = '/createagroup');
+
+        // ── Left panel search ─────────────────────────────────────────────────
+        document.getElementById('listSearch').addEventListener('input', function() {
+            const q = this.value.toLowerCase();
+            document.querySelectorAll('#mainList .list-item').forEach(item => {
+                const name = item.dataset.name?.toLowerCase() || '';
+                item.style.display = name.includes(q) ? '' : 'none';
+            });
+        });
+
+        // ── Friend / group invitation responses ───────────────────────────────
+        function respondFriendReq(id, action, btn) {
+            fetch('/api/friends/respond', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({friendship_id: id, action: action})
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    document.getElementById('freq-' + id)?.remove();
+                    if (action === 'accept') location.reload();
+                }
+            });
+        }
+
+        function respondGroupInv(groupId, action, btn) {
+            fetch('/api/groups/' + groupId + '/respond', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: action})
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    document.querySelectorAll('[id^="ginv-"]').forEach(el => {
+                        if (el.querySelector('[onclick*="' + groupId + '"]')) el.remove();
+                    });
+                    if (action === 'accept') location.reload();
+                }
+            });
+        }
+
+        // ── Chat ─────────────────────────────────────────────────────────────
+        function openChat(type, id, element) {
+            const name = element.dataset.name || '';
+            document.querySelectorAll('.list-item').forEach(el => el.classList.remove('active'));
+            element.classList.add('active');
+
+            // Remove unread badge immediately
+            const badge = element.querySelector('.unread-badge');
+            if (badge) badge.remove();
+
+            activeChatType = type;
+            activeChatId = id;
+            lastMessageId = 0;
+            chatRevision += 1;
+            chatPoll?.abort();
+            chatPoll = null;
+
+            document.getElementById('chatTitle').textContent = name;
+
+            const leaveBtn = document.getElementById('leaveChatBtn');
+            const unfriendBtn = document.getElementById('unfriendBtn');
+            const inviteBtn = document.getElementById('inviteBtn');
+            const membersBtn = document.getElementById('membersBtn');
+
+            if (type === 'group') {
+                leaveBtn.style.display = '';
+                unfriendBtn.style.display = 'none';
+                inviteBtn.style.display = '';
+                membersBtn.style.display = '';
+            } else {
+                leaveBtn.style.display = 'none';
+                unfriendBtn.style.display = '';
+                inviteBtn.style.display = 'none';
+                membersBtn.style.display = 'none';
+            }
+
+            const chatWindow = document.getElementById('chatWindow');
+            chatWindow.innerHTML = '';
+
+            localStorage.setItem('dodobook_chat_type', type);
+            localStorage.setItem('dodobook_chat_id', id);
+            localStorage.setItem('dodobook_chat_name', name);
+
+            fetchMessages();
+            if (pollingInterval) clearInterval(pollingInterval);
+            pollingInterval = setInterval(fetchMessages, 2500);
+        }
+
+        async function fetchMessages() {
+            if (!activeChatType || !activeChatId || chatPoll) return;
+            const poll = new AbortController();
+            chatPoll = poll;
+            try {
+                const response = await fetch(
+                    `/api/chat/messages?type=${activeChatType}&id=${activeChatId}&after=${lastMessageId}`,
+                    { signal: poll.signal }
+                );
+                if (!response.ok) return;
+                const { messages } = await response.json();
+                if (chatPoll !== poll || !messages.length) return;
+                const chatWindow = document.getElementById('chatWindow');
+                for (const msg of messages) {
+                    appendMessage(msg);
+                    lastMessageId = msg.id;
+                }
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            } catch (error) {
+                if (error.name !== 'AbortError') console.error('Could not refresh chat.', error);
+            } finally {
+                if (chatPoll === poll) chatPoll = null;
+            }
+        }
+
+        function formatMessageText(text) {
+            const source = (text || '').toString();
+            if (!source) return '';
+
+            const matches = [];
+            const youtubePattern = /(https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?[^\s]*v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})[^\s]*)/gi;
+            let ymatch;
+            while ((ymatch = youtubePattern.exec(source)) !== null) {
+                matches.push({ start: ymatch.index, end: ymatch.index + ymatch[0].length, kind: 'yt', url: ymatch[0], vid: ymatch[2] });
+            }
+
+            const urlPattern = /(https?:\/\/[^\s<>")']+)/gi;
+            let umatch;
+            while ((umatch = urlPattern.exec(source)) !== null) {
+                const url = umatch[0];
+                const isYoutube = matches.some(item => item.start <= umatch.index && item.end >= umatch.index + url.length);
+                if (!isYoutube) {
+                    matches.push({ start: umatch.index, end: umatch.index + url.length, kind: 'link', url: url });
+                }
+            }
+            matches.sort((a, b) => a.start - b.start);
+
+            let html = '';
+            let cursor = 0;
+            matches.forEach(match => {
+                if (match.start < cursor) return;
+                html += escapeHtml(source.slice(cursor, match.start));
+                if (match.kind === 'yt') {
+                    html += `<div class="yt-embed"><iframe src="https://www.youtube.com/embed/${escapeHtml(match.vid)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+                } else {
+                    const clean = match.url.replace(/[.,;:!?)]$/g, '');
+                    html += `<a href="${escapeHtml(clean)}" target="_blank" rel="noopener noreferrer">${escapeHtml(clean)}</a>`;
+                }
+                cursor = match.end;
+            });
+            html += escapeHtml(source.slice(cursor));
+            return html.replace(/\n/g, '<br>');
+        }
+
+        function appendMessage(msg) {
+            const chatWindow = document.getElementById('chatWindow');
+            const div = document.createElement('div');
+
+            if (msg.is_system) {
+                div.className = 'message';
+                div.style.justifyContent = 'center';
+                div.innerHTML = `<div class="system-message">— ${escapeHtml(msg.content)} —</div>`;
+                chatWindow.appendChild(div);
+                return;
+            }
+
+            const isMe = msg.sender_id === CURRENT_USER_ID;
+            div.className = 'message' + (isMe ? ' me' : '');
+
+            let content = formatMessageText(msg.content);
+            if (msg.file_path) {
+                if (msg.file_type === 'image') {
+                    content += `<div class="attached-file"><a href="${msg.file_path}" target="_blank"><img src="${msg.file_path}" alt="attachment"></a></div>`;
+                } else {
+                    const displayName = msg.file_name || msg.file_path.split('/').pop();
+                    const ext = displayName.includes('.') ? displayName.split('.').pop().toUpperCase() : 'FILE';
+                    const icon = fileIcon(ext.toLowerCase());
+                    content += `<div class="file-card">
+                        <div class="file-card-icon">${icon}</div>
+                        <div class="file-card-info">
+                            <div class="file-card-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</div>
+                            <div class="file-card-type">${escapeHtml(ext)}</div>
+                        </div>
+                        <a class="file-card-dl" href="${msg.file_path}" download="${escapeHtml(displayName)}">⬇</a>
+                    </div>`;
+                }
+            }
+
+            if (isMe) {
+                div.innerHTML = `<div class="bubble me">${content}</div>`;
+            } else {
+                div.innerHTML = `
+                    <div class="chat-avatar-wrapper" data-name="${escapeHtml(msg.sender_name)}">
+                        <img src="${msg.sender_pic}" alt="${escapeHtml(msg.sender_name)}" style="width:36px;height:36px;border-radius:8px;object-fit:cover">
+                    </div>
+                    <div class="bubble">${content}</div>`;
+            }
+            chatWindow.appendChild(div);
+        }
+
+        function fileIcon(ext) {
+            if (['pdf'].includes(ext)) return '📄';
+            if (['doc','docx'].includes(ext)) return '📝';
+            if (['xls','xlsx'].includes(ext)) return '📊';
+            if (['zip','rar','7z','tar','gz'].includes(ext)) return '🗜️';
+            if (['mp3','wav','ogg','flac'].includes(ext)) return '🎵';
+            if (['mp4','mov','avi','mkv'].includes(ext)) return '🎬';
+            return '📎';
+        }
+
+        async function sendChatMessage() {
+            if (!activeChatType || !activeChatId) return;
+            const button = document.getElementById('chat-send-btn');
+            if (button.disabled) return;
+            const input = document.getElementById('chat-input-field');
+            const draft = input.value;
+            const text = draft.trim();
+            const file = selectedFile;
+            if (!text && !file) return;
+
+            const revision = chatRevision;
+            const formData = new FormData();
+            formData.append('type', activeChatType);
+            formData.append('id', activeChatId);
+            if (text) formData.append('content', text);
+            if (file) formData.append('file', file);
+
+            button.disabled = true;
+            try {
+                const response = await fetch('/api/chat/message', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    alert(data.message || 'Could not send the message.');
+                    return;
+                }
+                if (input.value === draft) input.value = '';
+                if (selectedFile === file) clearChatFile();
+                if (revision === chatRevision) fetchMessages();
+            } catch (error) {
+                alert('Could not confirm that the message was sent.');
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        function handleChatKeypress(event) {
+            if (event.key === 'Enter') { event.preventDefault(); sendChatMessage(); }
+        }
+
+        function handleFileSelect(event) {
+            selectedFile = event.target.files[0] || null;
+            const preview = document.getElementById('attached-file-preview');
+            preview.innerHTML = '';
+            if (selectedFile) {
+                if (selectedFile.type.startsWith('image/')) {
+                    const img = document.createElement('img');
+                    img.src = URL.createObjectURL(selectedFile);
+                    preview.appendChild(img);
+                } else {
+                    preview.textContent = selectedFile.name;
+                }
+            }
+        }
+
+        function clearChatFile() {
+            selectedFile = null;
+            const fi = document.getElementById('chat-file-input');
+            if (fi) fi.value = '';
+            const preview = document.getElementById('attached-file-preview');
+            if (preview) preview.innerHTML = '';
+        }
+
+        // Restore last chat on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedType = localStorage.getItem('dodobook_chat_type');
+            const savedId = localStorage.getItem('dodobook_chat_id');
+            const savedName = localStorage.getItem('dodobook_chat_name');
+            if (savedType && savedId && savedName) {
+                const el = document.querySelector(`.list-item[data-type="${savedType}"][data-id="${savedId}"]`);
+                if (el) openChat(savedType, parseInt(savedId), el);
+            }
+        });
+
+        // ── Leave / unfriend ──────────────────────────────────────────────────
+        function leaveCurrentChat() {
+            if (!activeChatType || activeChatType !== 'group') return;
+            if (!confirm('Leave this group?')) return;
+            fetch('/api/groups/' + activeChatId + '/leave', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => { if (data.success) { clearInterval(pollingInterval); location.reload(); } });
+        }
+
+        function unfriendCurrentChat() {
+            if (!activeChatType || activeChatType !== 'direct') return;
+            if (!confirm('Remove this friend?')) return;
+            fetch('/api/friends/' + activeChatId, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => { if (data.success) { clearInterval(pollingInterval); location.reload(); } });
+        }
+
+        // ── Invite modal ──────────────────────────────────────────────────────
+        function openInviteModal() {
+            if (activeChatType !== 'group') return;
+            document.getElementById('inviteSearchInput').value = '';
+            document.getElementById('inviteSearchResults').innerHTML = '';
+
+            fetch('/api/friends/list?exclude_group=' + activeChatId)
+                .then(r => r.json())
+                .then(data => {
+                    const list = document.getElementById('inviteFriendsList');
+                    list.innerHTML = '';
+                    const section = document.getElementById('inviteFriendsSection');
+                    if (!data.friends.length) {
+                        section.style.display = 'none';
+                    } else {
+                        section.style.display = '';
+                        data.friends.forEach(f => {
+                            list.appendChild(buildInviteItem(f));
+                        });
+                    }
+                    document.getElementById('inviteModal').classList.add('active');
+                });
+        }
+
+        let inviteSearchTimer = null;
+        function searchInviteUsers(q) {
+            const resultsEl = document.getElementById('inviteSearchResults');
+            clearTimeout(inviteSearchTimer);
+            if (q.trim().length < 2) { resultsEl.innerHTML = ''; return; }
+            inviteSearchTimer = setTimeout(() => {
+                fetch('/api/friends/search?q=' + encodeURIComponent(q.trim()))
+                    .then(r => r.json())
+                    .then(data => {
+                        resultsEl.innerHTML = '';
+                        if (!data.users.length) {
+                            resultsEl.innerHTML = '<p style="color:var(--muted-text);font-size:12px;margin:4px 0 8px">No users found.</p>';
+                            return;
+                        }
+                        data.users.forEach(u => resultsEl.appendChild(buildInviteItem(u)));
+                        const sep = document.createElement('div');
+                        sep.style.cssText = 'height:1px;background:rgba(255,255,255,0.05);margin:8px 0';
+                        resultsEl.appendChild(sep);
+                    });
+            }, 300);
+        }
+
+        function buildInviteItem(u) {
+            const div = document.createElement('div');
+            div.className = 'invite-friend-item';
+            div.id = 'inv-user-' + u.id;
+            div.innerHTML = `
+                <img src="${u.profile_pic}" alt="${escapeHtml(u.username)}" style="width:32px;height:32px;border-radius:6px;object-fit:cover">
+                <span class="invite-friend-name">${escapeHtml(u.username)}</span>
+                <button class="invite-friend-btn" onclick="inviteFriend(${u.id}, this)">Invite</button>
+            `;
+            return div;
+        }
+
+        function closeInviteModal() {
+            document.getElementById('inviteModal').classList.remove('active');
+        }
+
+        function inviteFriend(userId, btn) {
+            fetch('/api/groups/' + activeChatId + '/invite', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({user_id: userId})
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    btn.textContent = 'Invited!';
+                    btn.disabled = true;
+                    // Also disable the same user in the other list if present
+                    document.querySelectorAll('#inv-user-' + userId + ' .invite-friend-btn').forEach(b => {
+                        b.textContent = 'Invited!'; b.disabled = true;
+                    });
+                } else {
+                    alert(data.message || 'Error.');
+                }
+            });
+        }
+
+        document.getElementById('inviteModal').addEventListener('click', function(e) {
+            if (e.target === this) closeInviteModal();
+        });
+
+        // ── Group Members modal ───────────────────────────────────────────────
+        function openMembersModal() {
+            if (activeChatType !== 'group') return;
+            fetch('/api/groups/' + activeChatId + '/members')
+                .then(r => r.json())
+                .then(data => {
+                    const list = document.getElementById('membersList');
+                    list.innerHTML = '';
+                    data.members.forEach(m => {
+                        const div = document.createElement('div');
+                        div.className = 'member-item';
+                        div.id = 'member-' + m.id;
+                        let kickHtml = '';
+                        if (data.current_user_is_admin && m.id !== CURRENT_USER_ID) {
+                            kickHtml = `<button class="kick-btn" onclick="kickMember(${m.id}, this)">Kick</button>`;
+                        }
+                        div.innerHTML = `
+                            <img src="${m.profile_pic}" alt="${escapeHtml(m.username)}">
+                            <span class="member-name">${escapeHtml(m.username)}</span>
+                            ${m.is_admin ? '<span class="member-badge">Admin</span>' : ''}
+                            ${kickHtml}
+                        `;
+                        list.appendChild(div);
+                    });
+                    document.getElementById('membersModal').classList.add('active');
+                });
+        }
+
+        function closeMembersModal() {
+            document.getElementById('membersModal').classList.remove('active');
+        }
+
+        function kickMember(userId, btn) {
+            const nameEl = btn.closest('.member-item').querySelector('.member-name');
+            const name = nameEl ? nameEl.textContent : 'this member';
+            if (!confirm(`Kick ${name} from the group?`)) return;
+            fetch(`/api/groups/${activeChatId}/kick/${userId}`, { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('member-' + userId)?.remove();
+                    } else {
+                        alert(data.message || 'Error.');
+                    }
+                });
+        }
+
+        document.getElementById('membersModal').addEventListener('click', function(e) {
+            if (e.target === this) closeMembersModal();
+        });
+
+        // ── Unread badge polling ───────────────────────────────────────────────
+        function pollUnread() {
+            fetch('/api/unread')
+                .then(r => r.json())
+                .then(data => {
+                    // Update online/offline indicators
+                    const online = data.online || {};
+                    Object.entries(online).forEach(([userId, isOnline]) => {
+                        const el = document.getElementById('online-status-' + userId);
+                        if (!el) return;
+                        if (isOnline) {
+                            el.innerHTML = '<span class="dot"></span><span>Online</span>';
+                        } else {
+                            el.innerHTML = '<span style="color:var(--muted-text)">Offline</span>';
+                        }
+                    });
+
+                    // Update unread badges (skip the 'online' key)
+                    document.querySelectorAll('.list-item .unread-badge').forEach(b => b.remove());
+                    Object.entries(data).forEach(([key, count]) => {
+                        if (key === 'online') return;
+                        const [type, id] = key.split('_');
+                        if (type === activeChatType && parseInt(id) === activeChatId) return;
+                        const el = document.querySelector(`.list-item[data-type="${type}"][data-id="${id}"]`);
+                        if (!el || count <= 0) return;
+                        const badge = document.createElement('span');
+                        badge.className = 'unread-badge';
+                        badge.textContent = count > 99 ? '99+' : count;
+                        el.appendChild(badge);
+                    });
+                });
+        }
+        pollUnread();
+        setInterval(pollUnread, 5000);
+
+        // ── Avatar tooltips ────────────────────────────────────────────────────
+        let tooltip = null, tooltipArrow = null;
+        document.addEventListener('mouseover', (e) => {
+            const wrapper = e.target.closest('.chat-avatar-wrapper');
+            if (!wrapper) return;
+            const name = wrapper.dataset.name;
+            if (!name) return;
+            if (!tooltip) {
+                tooltip = document.createElement('div');
+                tooltip.style.cssText = 'position:fixed;background:rgba(0,0,0,0.85);color:white;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:500;white-space:nowrap;z-index:10000;pointer-events:none';
+                document.body.appendChild(tooltip);
+            }
+            tooltip.textContent = name;
+            tooltip.style.display = 'block';
+            const rect = wrapper.getBoundingClientRect();
+            const tw = tooltip.offsetWidth || 80;
+            tooltip.style.left = (rect.left + rect.width / 2 - tw / 2) + 'px';
+            tooltip.style.top = (rect.top - 34) + 'px';
+        });
+        document.addEventListener('mouseout', (e) => {
+            if (!e.target.closest('.chat-avatar-wrapper') && tooltip) tooltip.style.display = 'none';
+        });
+
+        // ── Post: like ────────────────────────────────────────────────────────
+        function toggleLike(postId, button) {
+            fetch('/api/posts/' + postId + '/like', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if ('liked' in data) {
+                        button.classList.toggle('liked', data.liked);
+                        button.querySelector('.like-count').textContent = data.count;
+                    }
+                });
+        }
+
+        // ── Post: comments ────────────────────────────────────────────────────
+        function toggleComments(button) {
+            const dropdown = button.closest('.comments-dropdown');
+            const list = dropdown.querySelector('.comments-list');
+            list.classList.toggle('show');
+            if (list.classList.contains('show')) {
+                const input = list.querySelector('.comment-input-container input');
+                setTimeout(() => input.focus(), 100);
+            }
+        }
+
+        function handleCommentKeypress(event, input, postId) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                submitComment(input.closest('.comment-input-container').querySelector('button'), postId);
+            }
+        }
+
+        function submitComment(btn, postId) {
+            const input = btn.closest('.comment-input-container').querySelector('input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            fetch('/api/posts/' + postId + '/comment', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: text})
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    const commentsItems = btn.closest('.comments-list').querySelector('.comments-items');
+                    const div = document.createElement('div');
+                    div.className = 'comment-item';
+                    div.innerHTML = `<div class="comment-author">${escapeHtml(data.comment.author)}</div><div class="comment-text">${escapeHtml(data.comment.text)}</div>`;
+                    commentsItems.insertBefore(div, commentsItems.firstChild);
+                    input.value = '';
+                    input.focus();
+                }
+            });
+        }
+
+        // Close comments when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.comments-dropdown')) {
+                document.querySelectorAll('.comments-list').forEach(l => l.classList.remove('show'));
+            }
+        });
+
+        // ── Image carousel ────────────────────────────────────────────────────
+        function carouselNext(id) {
+            const car = document.querySelector(`[data-carousel="${id}"]`);
+            const imgs = car.querySelectorAll('.carousel-image');
+            let cur = 0;
+            imgs.forEach((img, i) => { if (img.style.display !== 'none') cur = i; });
+            const next = (cur + 1) % imgs.length;
+            imgs.forEach(img => img.style.display = 'none');
+            imgs[next].style.display = 'block';
+            car.querySelector('.carousel-current').textContent = next + 1;
+            imgs[next].style.transform = 'scale(1) translate(0,0)';
+            imgs[next].dataset.zoom = 1;
+        }
+
+        function carouselPrev(id) {
+            const car = document.querySelector(`[data-carousel="${id}"]`);
+            const imgs = car.querySelectorAll('.carousel-image');
+            let cur = 0;
+            imgs.forEach((img, i) => { if (img.style.display !== 'none') cur = i; });
+            const prev = (cur - 1 + imgs.length) % imgs.length;
+            imgs.forEach(img => img.style.display = 'none');
+            imgs[prev].style.display = 'block';
+            car.querySelector('.carousel-current').textContent = prev + 1;
+            imgs[prev].style.transform = 'scale(1) translate(0,0)';
+            imgs[prev].dataset.zoom = 1;
+        }
+
+        // Image zoom via scroll
+        document.querySelectorAll('.post-image-carousel').forEach(carousel => {
+            const container = carousel.querySelector('.carousel-container');
+            let isDragging = false, startX, startY, offsetX = 0, offsetY = 0;
+
+            container.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const image = carousel.querySelector('.carousel-image:not([style*="display: none"])');
+                if (!image) return;
+                let zoom = parseFloat(image.dataset.zoom) || 1;
+                zoom = Math.max(1, Math.min(zoom * (e.deltaY > 0 ? 0.9 : 1.1), 3));
+                image.dataset.zoom = zoom;
+                image.style.transform = `scale(${zoom}) translate(${offsetX}px,${offsetY}px)`;
+            }, { passive: false });
+
+            container.addEventListener('mousedown', (e) => {
+                const image = carousel.querySelector('.carousel-image:not([style*="display: none"])');
+                if (!image || parseFloat(image.dataset.zoom) <= 1) return;
+                isDragging = true; startX = e.clientX; startY = e.clientY;
+            });
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const image = carousel.querySelector('.carousel-image:not([style*="display: none"])');
+                if (!image) return;
+                const zoom = parseFloat(image.dataset.zoom) || 1;
+                offsetX += (e.clientX - startX) / zoom;
+                offsetY += (e.clientY - startY) / zoom;
+                image.style.transform = `scale(${zoom}) translate(${offsetX}px,${offsetY}px)`;
+                startX = e.clientX; startY = e.clientY;
+            });
+            document.addEventListener('mouseup', () => { isDragging = false; });
+        });
+
+        // ── Helpers ───────────────────────────────────────────────────────────
+        function escapeHtml(text) {
+            const d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+    </script>
+</body>
+</html>

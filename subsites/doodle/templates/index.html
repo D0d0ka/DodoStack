@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Doodle</title>
+  <link rel="icon" type="image/png" href="dodo.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="/" class="brand" aria-label="Doodle home">
+        <img src="dodo.png" alt="" class="brand-mascot" />
+        <span>Doodle</span>
+      </a>
+      <div class="doodle-account">
+        {% if request.shared_user %}
+        <a href="{{ workspace_url }}">{{ request.shared_user.username }}</a>
+        <form method="post" action="/logout"><button type="submit">Sign out</button></form>
+        {% else %}
+        <a href="/login">Sign in</a>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main ────────────────────────────────────────────────────────────── -->
+  <main>
+    <section class="hero">
+      <div class="logo-area">
+        <div class="logo-row">
+          <img src="dodo.png" alt="" class="logo-mascot" />
+          <h1 class="logo" id="logoText">Doodle</h1>
+        </div>
+        <p class="tagline">Let magic do the job.</p>
+      </div>
+
+      <form class="search-box" action="/search" method="GET">
+        <input type="text" id="searchInput" name="q"
+               placeholder="Search Doodle…"
+               autocomplete="off"
+               spellcheck="false" />
+        <div class="search-suggestions hidden" id="searchSuggestions"></div>
+        <button type="submit" class="search-btn">Search</button>
+      </form>
+      <div class="lucky-standalone">
+        <button type="button" class="search-btn lucky-btn" id="luckyBtn">I'm Feeling Lucky</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+
+</body>
+</html>

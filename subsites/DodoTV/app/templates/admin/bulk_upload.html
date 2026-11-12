@@ -1,0 +1,97 @@
+{% extends "admin/base.html" %}
+{% from "_macros.html" import field, checkbox %}
+{% block title %}Bulk upload — {{ show.title }}{% endblock %}
+{% block page_title %}Bulk upload episodes{% endblock %}
+{% block page_sub %}{{ show.title }} · upload several episode videos at once{% endblock %}
+
+{% block topbar_actions %}
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.show_edit', show_id=show.id) }}">← {{ show.title }}</a>
+{% endblock %}
+
+{% block content %}
+<div class="admin-editor-grid">
+  <div>
+    <section class="admin-panel">
+      <div class="admin-section">
+        <h2>Choose files</h2>
+        <p>Upload up to 20 videos at a time. Each file becomes one episode, in the order selected.</p>
+      </div>
+
+      <form method="post" enctype="multipart/form-data" action="{{ url_for('admin.bulk_upload', show_id=show.id) }}" data-upload-form novalidate>
+        {{ form.hidden_tag() }}
+        <div class="form-grid">
+          {{ field(form.season_id) }}
+          {{ field(form.number_start) }}
+        </div>
+
+        <div class="field {% if form.videos.errors %}has-error{% endif %}">
+          <label class="file-drop">
+            <input type="file" name="videos" accept="video/*" multiple>
+            <span class="file-drop-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+            </span>
+            <strong>Select episode videos</strong>
+            <small class="file-drop-filename" data-empty="No files selected">No files selected</small>
+          </label>
+          {% for error in form.videos.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        </div>
+
+        {{ checkbox(form.publish, 'Publish every uploaded episode that has a valid video.') }}
+
+        <div class="form-actions-bar">
+          <button class="btn btn-primary" type="submit">Upload episodes</button>
+          <a class="btn btn-ghost" href="{{ url_for('admin.show_edit', show_id=show.id) }}">Cancel</a>
+        </div>
+      </form>
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>How bulk upload works</h2>
+          <p>Everything below happens automatically for each file.</p>
+        </div>
+      </div>
+      <ul class="settings-list">
+        <li>Files are validated with FFprobe. Unsupported or corrupt files are skipped with a clear error.</li>
+        <li>Episode titles come from each file name. You can rename them afterwards.</li>
+        <li>Runtime is read from the video and preview frames are generated with FFmpeg.</li>
+        <li>Episode numbers start at the number you choose, skipping numbers already used in the season.</li>
+        <li>Uploading is sequential. Keep this tab open until every file has been processed.</li>
+      </ul>
+    </section>
+  </div>
+
+  <aside class="admin-editor-side">
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Selected season</h2>
+          <p>Episode numbering is per season.</p>
+        </div>
+      </div>
+      {% for season in show.seasons|sort(attribute='number') %}
+      <div class="info-row">
+        <span>Season {{ season.number }}</span>
+        <span>{{ season.episodes|length }} episode{{ '' if season.episodes|length == 1 else 's' }}</span>
+      </div>
+      {% endfor %}
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Tips</h2>
+          <p>Get the best results from your uploads.</p>
+        </div>
+      </div>
+      <ul class="settings-list">
+        <li>Use <code>Show Name - S01E02 - Episode Title.mp4</code> style names for readable titles.</li>
+        <li>MP4 with H.264 video and AAC audio plays in every modern browser.</li>
+        <li>Large uploads are limited by <code>MAX_UPLOAD_MB</code> in your <code>.env</code> file.</li>
+        <li>Need to upload to a new season? Create it from the show page first.</li>
+      </ul>
+    </section>
+  </aside>
+</div>
+{% endblock %}

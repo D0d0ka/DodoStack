@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Something went wrong — {{ site.site_name }}{% endblock %}
+{% block content %}
+<div class="error-page">
+  <div>
+    <div class="error-code">500</div>
+    <h1>The projector jammed.</h1>
+    <p>An unexpected error interrupted this scene. Please try again. If it keeps happening, the server logs will have the details.</p>
+    <div class="hero-actions" style="justify-content:center">
+      <a class="btn btn-primary" href="{{ url_for('main.index') }}">Back to home</a>
+      <button class="btn btn-ghost" type="button" onclick="history.back()">Go back</button>
+    </div>
+  </div>
+</div>
+{% endblock %}

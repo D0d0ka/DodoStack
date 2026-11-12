@@ -1,0 +1,79 @@
+{% extends "admin/base.html" %}
+{% block title %}Users{% endblock %}
+{% block page_title %}Users{% endblock %}
+{% block page_sub %}{{ users|length }} account{{ '' if users|length == 1 else 's' }} in this view{% endblock %}
+
+{% block topbar_actions %}
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.settings') }}">Profile access settings</a>
+{% endblock %}
+
+{% block content %}
+<form class="admin-filter" method="get" action="{{ url_for('admin.users') }}">
+  <input class="input" type="search" name="q" value="{{ q }}" placeholder="Search by username or email" aria-label="Search users" maxlength="100">
+  <button class="btn btn-ghost btn-sm" type="submit">Filter</button>
+  {% if q %}
+    <a class="text-link" href="{{ url_for('admin.users') }}">Reset</a>
+  {% endif %}
+</form>
+
+{% if users %}
+<div class="table-wrap">
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Member</th>
+        <th>Status</th>
+        <th>Joined</th>
+        <th>Last visit</th>
+        <th>Watch entries</th>
+        <th style="text-align:right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for user in users %}
+      <tr>
+        <td>
+          <div class="table-title">
+            <span class="avatar" style="width:36px;height:36px">{{ user.initial }}</span>
+            <div>
+              <strong>{{ user.username }}{% if user.id == current_user.id %} (you){% endif %}</strong>
+              <span>{{ user.email }}</span>
+            </div>
+          </div>
+        </td>
+        <td>
+          <span class="status-badge {{ 'published' if user.is_active else 'danger' }}">{{ 'Active' if user.is_active else 'Deactivated' }}</span>
+        </td>
+        <td class="muted">{{ user.created_at|timeago }}</td>
+        <td class="muted">{{ user.last_login_at|timeago if user.last_login_at else 'Never' }}</td>
+        <td>{{ user.watch_history|length }}</td>
+        <td>
+          <div class="table-actions">
+            {% if user.id == current_user.id %}
+              <span class="muted" style="font-size:.68rem">Manage roles in DodoStack</span>
+            {% else %}
+              <form method="post" action="{{ url_for('admin.user_toggle_active', user_id=user.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="mini-btn {{ 'danger' if user.is_active else 'success' }}" type="submit">{{ 'Deactivate' if user.is_active else 'Reactivate' }}</button>
+              </form>
+              <form method="post" action="{{ url_for('admin.user_delete', user_id=user.id) }}" data-confirm="Delete the Dodo TV profile “{{ user.username }}”? Their watch history and progress will be removed.">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="mini-btn danger" type="submit">Delete</button>
+              </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="admin-empty">
+  <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M17 3.5a4 4 0 0 1 0 7.5M22 21a6 6 0 0 0-4-5.6"/></svg>
+  <h3>No matching users</h3>
+  <p>Try a different search.</p>
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.users') }}">Clear filters</a>
+</div>
+{% endif %}
+{% endblock %}

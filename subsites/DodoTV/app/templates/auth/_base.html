@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050a13">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>{% block title %}{{ site.site_name }}{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('media.logo') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="auth-body">
+  <a class="skip-link" href="#auth-main">Skip to form</a>
+  {% include "_flashes.html" %}
+  <div class="auth-page">
+    <section class="auth-visual">
+      <div class="auth-visual-inner">
+        <a class="brand" href="{{ url_for('main.index') }}">
+          <img src="{{ url_for('media.logo') }}" alt="" class="brand-logo" width="52" height="52">
+          <span class="brand-word" style="font-size:1.4rem">DODO<span class="brand-accent">TV</span></span>
+        </a>
+        <span class="eyebrow">Stories worth staying in for</span>
+        <h2 style="margin-top:16px">Every kind of story.<br><span>One place to watch.</span></h2>
+        <p>Movies, series and episodes in a cinema-grade player. Pick up exactly where you left off on any device.</p>
+        <div class="auth-features">
+          <span class="auth-feature"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg> Resume playback</span>
+          <span class="auth-feature"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg> Multi-language subtitles</span>
+          <span class="auth-feature"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg> Watch history</span>
+          <span class="auth-feature"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg> HD streaming</span>
+        </div>
+      </div>
+    </section>
+    <section class="auth-form-side" id="auth-main">
+      <div class="auth-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:28px">
+          <a class="text-link" href="{{ url_for('main.index') }}">← Back to {{ site.site_name }}</a>
+          <a class="brand brand-mobile" href="{{ url_for('main.index') }}">
+            <img src="{{ url_for('media.logo') }}" alt="" width="34" height="34" style="border-radius:9px">
+          </a>
+        </div>
+        {% block form_content %}{% endblock %}
+      </div>
+    </section>
+  </div>
+  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</body>
+</html>

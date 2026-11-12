@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/static/facicon.ico">
+    <title>User Settings - Dodobook</title>
+    <style>
+        :root{--bg:#071428;--panel:#0b2742;--card:#0f3b61;--accent:#1e66b0;--muted:#234a6f;--text:#e6f2ff;--muted-text:#bcd4f2;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
+        html,body{height:100%;margin:0;background: linear-gradient(180deg,var(--bg),#062033 80%);color:var(--text);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+        body{overflow:auto}
+        header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;background:linear-gradient(90deg,rgba(255,255,255,0.02),transparent);backdrop-filter:blur(4px)}
+        header h1{margin:0;cursor:pointer;transition:all 0.2s ease}
+        header h1:hover{color:var(--accent)}
+        .center{max-width:640px;margin:40px auto;padding:18px;flex:1}
+        .panel{background:linear-gradient(180deg,var(--panel),var(--card));border-radius:12px;padding:24px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+        label{display:block;margin:10px 0 6px;color:var(--muted-text)}
+        input{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text);transition:all 0.2s ease;box-sizing:border-box}
+        input:focus{outline:none;border-color:var(--accent);background:rgba(30,102,176,0.05)}
+        textarea{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text);transition:all 0.2s ease;box-sizing:border-box;resize:vertical;min-height:80px}
+        textarea:focus{outline:none;border-color:var(--accent);background:rgba(30,102,176,0.05)}
+        .info-box{background:rgba(232,107,107,0.08);border-left:3px solid rgba(232,107,107,0.5);padding:12px;border-radius:8px;margin:12px 0;color:var(--text);font-size:13px}
+        .success-box{background:rgba(100,200,100,0.1);border-left:3px solid rgba(100,200,100,0.5);padding:12px;border-radius:8px;margin:12px 0;color:var(--text);font-size:13px;display:none}
+        .pill{background:var(--accent);color:white;border:1px solid var(--accent);padding:10px 16px;border-radius:8px;cursor:pointer;transition:all 0.2s ease;font-weight:500}
+        .pill:hover{background:rgba(30,102,176,0.8);border-color:rgba(30,102,176,0.8)}
+        .pill-secondary{background:transparent;border:1px solid rgba(255,255,255,0.1);color:var(--muted-text)}
+        .pill-secondary:hover{background:rgba(255,255,255,0.05);color:var(--text)}
+        .pill-danger{background:transparent;border:1px solid rgba(232,107,107,0.3);color:#ffd6d6}
+        .pill-danger:hover{background:rgba(232,107,107,0.1);border-color:rgba(232,107,107,0.5)}
+        .actions-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+        .profile-pic-upload{display:flex;align-items:center;gap:12px;margin:12px 0}
+        .profile-pic-preview{width:80px;height:80px;border-radius:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);object-fit:cover}
+        .form-section{margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,0.05)}
+        .form-section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+        .section-title{font-size:16px;font-weight:600;margin-bottom:12px;color:var(--accent)}
+    </style>
+</head>
+<body>
+    <header>
+        <h1 onclick="location.href='/'">Dodobook</h1>
+    </header>
+
+    <main class="center">
+        <div class="panel">
+            <h2 style="margin-top:0">User Settings</h2>
+
+            <div class="success-box" id="successMessage">Changes saved successfully!</div>
+
+            <form id="settingsForm">
+                <div class="form-section">
+                    <div class="section-title">Account Information</div>
+                    <label for="username">Username</label>
+                    <input id="username" name="username" placeholder="username" value="{{ current_user.username }}" required>
+
+                    <label for="email" style="margin-top:12px">Email</label>
+                    <input id="email" name="email" type="email" placeholder="you@example.com" value="{{ current_user.email }}" required>
+                </div>
+
+                <div class="form-section">
+                    <a href="{{ workspace_url }}/account/password">Change your DodoStack password</a>
+                </div>
+
+                <div class="form-section">
+                    <div class="section-title">Profile Picture</div>
+                    <div class="profile-pic-upload">
+                        <input type="file" id="profilepic" name="profilepic" accept="image/*" style="display:none" onchange="previewProfilePic(event)">
+                        {% if current_user.profile_pic %}
+                            <img id="profilePicPreview" class="profile-pic-preview" src="{{ url_for('static', filename=current_user.profile_pic) }}" alt="Profile">
+                        {% else %}
+                            <img id="profilePicPreview" class="profile-pic-preview" src="{{ url_for('static', filename='default-avatar.svg') }}" alt="Profile">
+                        {% endif %}
+                        <button type="button" class="pill" onclick="document.getElementById('profilepic').click()">Choose Picture</button>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <div class="section-title">About You</div>
+                    <label for="bio">Bio</label>
+                    <textarea id="bio" name="bio" placeholder="Tell us about yourself...">{{ current_user.bio or '' }}</textarea>
+                </div>
+
+                <div class="form-section">
+                    <div class="actions-row">
+                        <button type="submit" class="pill">Save Changes</button>
+                        <button type="button" class="pill pill-secondary" onclick="location.href='/'">Cancel</button>
+                        <button type="button" class="pill pill-danger" onclick="confirmDelete()">Delete Account</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <script>
+        function previewProfilePic(event) {
+            const file = event.target.files[0];
+            const preview = document.getElementById('profilePicPreview');
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) { preview.src = e.target.result; };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function confirmDelete() {
+            if (confirm('Are you sure you want to delete your account? This cannot be undone.')) {
+                fetch('/api/user/delete', { method: 'DELETE' })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) location.href = '/login';
+                        else alert('Error deleting account.');
+                    });
+            }
+        }
+
+        document.getElementById('settingsForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const picFile = document.getElementById('profilepic').files[0];
+            if (picFile) formData.set('profilepic', picFile);
+
+            fetch('/api/user/update', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        const box = document.getElementById('successMessage');
+                        box.style.display = 'block';
+                        setTimeout(() => box.style.display = 'none', 3000);
+                    } else {
+                        alert('Error: ' + (data.message || 'Could not save settings.'));
+                    }
+                });
+        });
+    </script>
+</body>
+</html>

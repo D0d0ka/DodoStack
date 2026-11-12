@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "_macros.html" import empty_state %}
+{% block title %}Watch history — {{ site.site_name }}{% endblock %}
+
+{% block content %}
+<div class="container page-shell">
+  <div class="page-shell-head">
+    <div>
+      <span class="eyebrow">Your activity</span>
+      <h1>Watch history</h1>
+      <p>Everything you have started watching, most recent first.</p>
+    </div>
+    {% if entries %}
+    <form method="post" action="{{ url_for('auth.clear_history') }}" data-confirm="Clear your entire watch history and all playback progress? This cannot be undone.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-danger btn-sm" type="submit">Clear history</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if entries %}
+    <div class="history-list">
+      {% for entry in entries %}
+        {% if entry.movie %}
+          {% set image = entry.movie.poster_path|media %}
+          {% set item_title = entry.movie.title %}
+          {% set item_sub = 'Movie · ' ~ (entry.movie.release_year or '') %}
+          {% set item_url = url_for('main.watch_movie', movie_id=entry.movie.id) %}
+          {% set item_label = 'MOVIE' %}
+        {% elif entry.episode %}
+          {% set image = (entry.episode.thumbnail_path or entry.episode.show.poster_path)|media %}
+          {% set item_title = entry.episode.title %}
+          {% set item_sub = entry.episode.show.title ~ ' · ' ~ entry.episode.display_code %}
+          {% set item_url = url_for('main.watch_episode', episode_id=entry.episode.id) %}
+          {% set item_label = entry.episode.show.title %}
+        {% endif %}
+        {% if entry.movie or entry.episode %}
+        <article class="history-item reveal">
+          <a class="history-thumb" href="{{ item_url }}" aria-label="Play {{ item_title }}">
+            {% if image %}<img src="{{ image }}" alt="" loading="lazy">{% endif %}
+          </a>
+          <div class="history-copy">
+            <span class="badge">{{ item_label }}</span>
+            <h3><a href="{{ item_url }}">{{ item_title }}</a></h3>
+            <p>{{ item_sub }} · Watched {{ entry.watched_at|timeago }}</p>
+          </div>
+          <div class="history-actions">
+            <a class="btn btn-primary btn-sm" href="{{ item_url }}">Play</a>
+            {% if entry.movie %}
+              <a class="text-link" href="{{ url_for('main.movie_detail', movie_id=entry.movie.id) }}">Details</a>
+            {% elif entry.episode %}
+              <a class="text-link" href="{{ url_for('main.show_detail', show_id=entry.episode.show_id) }}">Details</a>
+            {% endif %}
+            <form method="post" action="{{ url_for('auth.remove_history', history_id=entry.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="icon-button" type="submit" aria-label="Remove {{ item_title }} from history" title="Remove entry">
+                <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+              </button>
+            </form>
+          </div>
+        </article>
+        {% endif %}
+      {% endfor %}
+    </div>
+  {% else %}
+    {{ empty_state(
+      "No watch history yet",
+      "Start a movie or an episode and your progress will show up here so you can pick up right where you left off.",
+      url_for('main.browse'),
+      "Find something to watch",
+      "history"
+    ) }}
+  {% endif %}
+</div>
+{% endblock %}

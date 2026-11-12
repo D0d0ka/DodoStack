@@ -1,0 +1,18 @@
+.dodo-admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px clamp(14px, 4vw, 52px);
+  background: #173b2d;
+  color: #fff;
+  font: 600 14px/1.4 system-ui, sans-serif;
+}
+.dodo-admin-tabs a {
+  padding: 6px 10px;
+  border-radius: 5px;
+  color: #f2f7ed;
+  text-decoration: none;
+}
+.dodo-admin-tabs a:first-child { font-weight: 800; margin-inline-end: 12px; }
+.dodo-admin-tabs a:hover, .dodo-admin-tabs a[aria-current="page"] { background: #35644b; }

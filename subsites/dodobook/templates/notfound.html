@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/static/facicon.ico">
+    <title>Page Not Found - Dodobook</title>
+    <style>
+        :root{
+            --bg: #071428;
+            --panel: #0b2742;
+            --card: #0f3b61;
+            --accent: #1e66b0;
+            --muted: #234a6f;
+            --text: #e6f2ff;
+            --muted-text: #bcd4f2;
+            --online: #37d67a;
+            font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+        }
+        html,body{height:100%;margin:0;background: linear-gradient(180deg,var(--bg),#062033 80%);color:var(--text);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+        body{overflow:hidden}
+        header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;background:linear-gradient(90deg,rgba(255,255,255,0.02),transparent);backdrop-filter:blur(4px)}
+        header h1{font-size:18px;margin:0}
+        header .actions{display:flex;gap:10px;align-items:center}
+        header button{background:var(--panel);border:1px solid rgba(255,255,255,0.03);color:var(--text);padding:8px 12px;border-radius:8px;cursor:pointer}
+        .container{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:18px;width:100%;flex:1;overflow:hidden}
+        .panel{background:linear-gradient(180deg,var(--panel),var(--card));border-radius:12px;padding:14px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+        .not-found-panel{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:48px 32px;max-width:600px;text-align:center}
+        .error-code{font-size:96px;font-weight:700;background:linear-gradient(90deg,var(--accent),#2a86d1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0}
+        .error-title{font-size:32px;font-weight:700;color:var(--text);margin:0}
+        .error-message{font-size:16px;color:var(--muted-text);margin:0;line-height:1.6}
+        .back-button{background:linear-gradient(90deg,var(--accent),#2a86d1);border:none;color:white;padding:12px 28px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:all 0.12s ease;display:inline-block;text-decoration:none}
+        .back-button:hover{opacity:0.9;box-shadow:0 0 20px rgba(30,102,176,0.3)}
+        h1,h2{margin:0}
+        .muted{color:var(--muted-text)}
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Dodobook</h1>
+    </header>
+    <main class="container">
+        <div class="panel not-found-panel">
+            <div class="error-code">404</div>
+            <h2 class="error-title">Page Not Found</h2>
+            <p class="error-message">Oops! It looks like the page you're looking for doesn't exist. The Dodo must have flown away with it!</p>
+            <a href="/" class="back-button">← Return to Home</a>
+        </div>
+    </main>
+</body>
+</html>

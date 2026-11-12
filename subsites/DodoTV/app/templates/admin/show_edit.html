@@ -1,0 +1,410 @@
+{% extends "admin/base.html" %}
+{% from "_macros.html" import field, checkbox, empty_state %}
+{% block title %}{{ show.title }}{% endblock %}
+{% block page_title %}{{ show.title }}{% endblock %}
+{% block page_sub %}Series settings, seasons, episodes and bulk tools{% endblock %}
+
+{% block topbar_actions %}
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.shows') }}">← All shows</a>
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('main.show_detail', show_id=show.id) }}" target="_blank" rel="noopener">View public page ↗</a>
+  <a class="btn btn-primary btn-sm" href="{{ url_for('admin.episode_new', show_id=show.id) }}">+ Add episode</a>
+{% endblock %}
+
+{% block content %}
+<form method="post" enctype="multipart/form-data" action="{{ url_for('admin.show_edit', show_id=show.id) }}" data-upload-form novalidate>
+  {{ form.hidden_tag() }}
+  <div class="admin-editor-grid">
+    <div>
+      <section class="admin-panel">
+        <div class="admin-section">
+          <h2>Series details</h2>
+          <p>Update the description and metadata for {{ show.title }}.</p>
+        </div>
+        {{ field(form.title, placeholder="Series title") }}
+        {{ field(form.description, placeholder="Series synopsis…") }}
+        <div class="form-grid">
+          {{ field(form.release_year, placeholder="2026") }}
+          {{ field(form.age_rating) }}
+          <div class="field span-2">
+            <span class="field-label">Genres</span>
+            <div class="genre-check-grid">
+              {% for value, label in form.genre_ids.choices %}
+              <label class="choice-chip">
+                <input type="checkbox" name="genre_ids" value="{{ value }}" {% if form.genre_ids.data and value in form.genre_ids.data %}checked{% endif %}>
+                <span>{{ label }}</span>
+              </label>
+              {% endfor %}
+            </div>
+            {% for error in form.genre_ids.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+          </div>
+        </div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="admin-section">
+          <h2>Artwork &amp; trailer</h2>
+          <p>Upload replacement artwork or attach the official trailer.</p>
+        </div>
+
+        {% if show.trailer_path %}
+        <div class="current-media">
+          <span class="media-icon">
+            <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M9 9l6 3-6 3V9Z"/></svg>
+          </span>
+          <div class="current-media-copy">
+            <strong>Trailer attached</strong>
+            <span title="{{ show.trailer_path }}">{{ show.trailer_path }}</span>
+          </div>
+          <div class="current-media-actions">
+            <button class="mini-btn danger" type="submit" form="show-remove-trailer-form">Remove</button>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="field {% if form.trailer.errors %}has-error{% endif %}">
+          <label class="file-drop">
+            <input type="file" name="trailer" accept="video/*">
+            <span class="file-drop-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 5h16v14H4z"/><path d="M9 9l6 3-6 3V9Z"/></svg>
+            </span>
+            <strong>{{ 'Replace trailer' if show.trailer_path else 'Upload a trailer (optional)' }}</strong>
+            <small class="file-drop-filename" data-empty="No file selected">No file selected</small>
+          </label>
+          {% for error in form.trailer.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.thumbnail.errors %}has-error{% endif %}">
+          <label class="file-drop">
+            <input type="file" name="thumbnail" accept="image/*" data-image-input="#show-edit-poster">
+            <span class="file-drop-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5L5 20"/></svg>
+            </span>
+            <strong>{{ 'Replace series poster' if show.poster_path else 'Upload a series poster' }}</strong>
+            <small class="file-drop-filename" data-empty="No file selected">No file selected</small>
+          </label>
+          {% for error in form.thumbnail.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        </div>
+      </section>
+
+      <div class="form-actions-bar">
+        <button class="btn btn-primary" type="submit">Save changes</button>
+        <a class="btn btn-ghost" href="{{ url_for('admin.shows') }}">Back to shows</a>
+        <span class="spacer"></span>
+      </div>
+    </div>
+
+    <aside class="admin-editor-side">
+      <section class="admin-panel">
+        <div class="admin-panel-head">
+          <div>
+            <h2>Poster</h2>
+            <p>Used on series cards and detail pages.</p>
+          </div>
+        </div>
+        <div class="poster-preview">
+          {% if show.poster_path %}
+            <img id="show-edit-poster" src="{{ show.poster_path|media }}" alt="{{ show.title }} poster">
+          {% else %}
+            <span class="poster-fallback">No poster</span>
+          {% endif %}
+          <div>
+            <strong>{{ 'Poster uploaded' if show.poster_path else 'No poster selected' }}</strong>
+            <span>Upload artwork above. Episodes without thumbnails fall back to this image.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="admin-panel-head">
+          <div>
+            <h2>Visibility</h2>
+            <p>Publishing requires a poster and a published episode.</p>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          {{ checkbox(form.published, 'Hidden from viewers while unchecked.') }}
+          {{ checkbox(form.featured, 'Show this series in the homepage hero.') }}
+        </div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="admin-panel-head">
+          <div>
+            <h2>Series status</h2>
+            <p>Catalog readiness at a glance.</p>
+          </div>
+        </div>
+        <div class="info-row"><span>Seasons</span><span>{{ show.season_count }}</span></div>
+        <div class="info-row"><span>Episodes</span><span>{{ show.episode_count }}</span></div>
+        <div class="info-row"><span>Published</span><span>{{ show.episodes|selectattr('published')|list|length }}</span></div>
+        <div class="info-row"><span>Trailer</span><span>{{ 'Ready' if show.trailer_path else 'None' }}</span></div>
+        <div class="info-row"><span>Created</span><span>{{ show.created_at|timeago }}</span></div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+          <a class="btn btn-soft btn-sm btn-block" href="{{ url_for('admin.bulk_upload', show_id=show.id) }}">Bulk upload episodes</a>
+          <a class="btn btn-ghost btn-sm btn-block" href="{{ url_for('admin.episode_new', show_id=show.id) }}">Add a single episode</a>
+        </div>
+      </section>
+    </aside>
+  </div>
+</form>
+
+<form id="show-remove-trailer-form" method="post" action="{{ url_for('admin.show_remove_trailer', show_id=show.id) }}" data-confirm="Remove the trailer from this show? The file will be deleted." style="display:none">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+</form>
+
+<section class="admin-panel" style="margin-top:18px">
+  <div class="admin-panel-head">
+    <div>
+      <h2>Trailer subtitles</h2>
+      <p>WebVTT tracks shown inside the trailer player.</p>
+    </div>
+  </div>
+  {% if show.trailer_path %}
+    {% if show.trailer_subtitles %}
+    <div class="subtitle-list">
+      {% for subtitle in show.trailer_subtitles|sort(attribute='label') %}
+      <div class="subtitle-row">
+        <span class="lang">{{ subtitle.language }}</span>
+        <div class="subtitle-row-copy">
+          <strong>{{ subtitle.label }}</strong>
+          <span>{{ subtitle.file_path }}{% if subtitle.is_default %} · Default track{% endif %}</span>
+        </div>
+        <div class="subtitle-row-actions">
+          {% if not subtitle.is_default %}
+          <form method="post" action="{{ url_for('admin.trailer_subtitle_make_default', kind='show', content_id=show.id, subtitle_id=subtitle.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="mini-btn" type="submit">Make default</button>
+          </form>
+          {% endif %}
+          <form method="post" action="{{ url_for('admin.trailer_subtitle_delete', kind='show', content_id=show.id, subtitle_id=subtitle.id) }}" data-confirm="Delete the "{{ subtitle.label }}" trailer subtitle?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="mini-btn danger" type="submit">Delete</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted" style="font-size:.78rem">No trailer subtitle tracks yet. Upload a .vtt file below.</p>
+    {% endif %}
+
+    <form class="subtitle-add" method="post" enctype="multipart/form-data" action="{{ url_for('admin.trailer_subtitle_add', kind='show', content_id=show.id) }}">
+      {{ trailer_subtitle_form.hidden_tag() }}
+      <h3>Add a trailer subtitle track</h3>
+      <div class="subtitle-add-grid">
+        {{ field(trailer_subtitle_form.language, placeholder="en") }}
+        {{ field(trailer_subtitle_form.label, placeholder="English") }}
+        <div class="field {% if trailer_subtitle_form.file.errors %}has-error{% endif %}">
+          <label class="field-label" for="show-trailer-subtitle-file">WebVTT file</label>
+          <input class="input" id="show-trailer-subtitle-file" type="file" name="file" accept=".vtt,text/vtt">
+          {% for error in trailer_subtitle_form.file.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        </div>
+        <div>
+          <label class="check-field" style="padding:10px 12px">
+            {{ trailer_subtitle_form.is_default() }}
+            <span class="check-ui" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg></span>
+            <span class="check-copy"><span>Default</span></span>
+          </label>
+        </div>
+        <button class="btn btn-soft btn-sm" type="submit">Add track</button>
+      </div>
+    </form>
+  {% else %}
+    <p class="muted" style="font-size:.78rem">Upload a trailer first, then you can attach subtitle tracks to it.</p>
+  {% endif %}
+</section>
+
+<section class="admin-panel" style="margin-top:18px">
+  <div class="admin-panel-head">
+    <div>
+      <h2>Seasons</h2>
+      <p>Seasons organise episodes and keep numbering consistent.</p>
+    </div>
+  </div>
+
+  {% if show.seasons %}
+  <div class="season-list">
+    {% for season in show.seasons|sort(attribute='number') %}
+    <div class="season-row">
+      <span class="season-number">{{ 'SP' if season.number == 0 else season.number }}</span>
+      <div class="season-copy">
+        <strong>{{ season.display_title }}</strong>
+        <span>{{ season.episodes|length }} episode{{ '' if season.episodes|length == 1 else 's' }}{% if season.description %} · {{ season.description|truncate(70) }}{% endif %}</span>
+      </div>
+      <div class="season-actions">
+        <a class="mini-btn" href="{{ url_for('admin.episode_new', show_id=show.id, season_id=season.id) }}">Add episode</a>
+        <a class="mini-btn" href="{{ url_for('admin.season_edit', show_id=show.id, season_id=season.id) }}">Edit</a>
+        <form method="post" action="{{ url_for('admin.season_delete', show_id=show.id, season_id=season.id) }}" data-confirm="Delete Season {{ season.number }} and all {{ season.episodes|length }} episode(s)? Uploaded files will also be deleted.">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="mini-btn danger" type="submit">Delete</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted" style="font-size:.8rem;margin-bottom:14px">No seasons yet. Create the first season below before adding episodes.</p>
+  {% endif %}
+
+  <form class="season-add" method="post" action="{{ url_for('admin.season_new', show_id=show.id) }}">
+    {{ season_form.hidden_tag() }}
+    {{ field(season_form.number, placeholder="1") }}
+    {{ field(season_form.title, placeholder="Season title (optional)") }}
+    <p class="field-hint" style="margin-top:-6px;font-size:.75rem">Tip: use <strong>0</strong> to create a <em>Specials</em> season for bonus episodes.</p>
+    <button class="btn btn-soft" type="submit">Add season</button>
+  </form>
+</section>
+
+<section class="admin-panel">
+  <div class="admin-panel-head">
+    <div>
+      <h2>Episodes</h2>
+      <p>{{ episodes|length }} episode{{ '' if episodes|length == 1 else 's' }} across {{ show.season_count }} season{{ '' if show.season_count == 1 else 's' }}.</p>
+    </div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap">
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.bulk_upload', show_id=show.id) }}">Bulk upload</a>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('admin.episode_new', show_id=show.id) }}">+ Add episode</a>
+    </div>
+  </div>
+
+  {% if episodes %}
+  <div class="episode-admin-list">
+    {% for episode in episodes %}
+    <div class="episode-admin-row">
+      <div class="episode-admin-thumb">
+        {% if episode.thumbnail_path %}
+          <img src="{{ episode.thumbnail_path|media }}" alt="" loading="lazy">
+        {% elif show.poster_path %}
+          <img src="{{ show.poster_path|media }}" alt="" loading="lazy">
+        {% else %}
+          <span class="card-fallback">{{ episode.number }}</span>
+        {% endif %}
+      </div>
+      <div class="episode-admin-copy">
+        <strong><span class="code">{{ episode.display_code }}</span> · {{ episode.title }}</strong>
+        <span>{{ episode.runtime_display or 'Runtime pending' }} · {{ 'Video ready' if episode.video_path else 'No video' }} · {{ episode.subtitles|length }} subtitle{{ '' if episode.subtitles|length == 1 else 's' }}</span>
+      </div>
+      <span class="status-badge {{ 'published' if episode.published else 'draft' }}">{{ 'Published' if episode.published else 'Draft' }}</span>
+      <div class="episode-admin-actions">
+        <a class="mini-btn" href="{{ url_for('main.watch_episode', episode_id=episode.id) }}" target="_blank" rel="noopener">Play</a>
+        <a class="mini-btn" href="{{ url_for('admin.episode_edit', episode_id=episode.id) }}">Edit</a>
+        <form method="post" action="{{ url_for('admin.episode_toggle_publish', episode_id=episode.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="mini-btn {{ 'danger' if episode.published else 'success' }}" type="submit">{{ 'Unpublish' if episode.published else 'Publish' }}</button>
+        </form>
+        <form method="post" action="{{ url_for('admin.episode_delete', episode_id=episode.id) }}" data-confirm="Delete episode {{ episode.display_code }} “{{ episode.title }}” and its uploaded files?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="mini-btn danger" type="submit">Delete</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="admin-empty">
+    <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M10 13l2 1.5L14 13"/></svg>
+    <h3>No episodes yet</h3>
+    <p>{% if show.seasons %}Add an episode individually, or upload a batch of videos at once.{% else %}Create a season first, then add episodes.{% endif %}</p>
+    {% if show.seasons %}<a class="btn btn-primary btn-sm" href="{{ url_for('admin.episode_new', show_id=show.id) }}">Add the first episode</a>{% endif %}
+  </div>
+  {% endif %}
+</section>
+
+<section class="admin-panel bulk-panel">
+  <div class="admin-panel-head">
+    <div>
+      <h2>Bulk metadata</h2>
+      <p>Copy the show's description, age rating or publish state to its episodes.</p>
+    </div>
+  </div>
+  <form method="post" action="{{ url_for('admin.bulk_apply', show_id=show.id) }}" data-bulk-form>
+    {{ bulk_form.hidden_tag() }}
+    <input type="hidden" name="episode_ids" id="bulk-episode-ids" value="{{ bulk_form.episode_ids.data or '' }}">
+
+    <div class="bulk-target">
+      {% for value, label in bulk_form.target.choices %}
+      <label class="choice-chip">
+        <input type="radio" name="target" value="{{ value }}" {% if (bulk_form.target.data or 'all') == value %}checked{% endif %}>
+        <span>{{ label }}</span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="bulk-selection-bar">
+      <span data-selected-count>0 episodes selected</span>
+      {% if episodes|length > 1 %}
+      <label class="bulk-episode-option" style="padding:0;color:var(--muted)">
+        <input type="checkbox" id="bulk-select-all"> Select all
+      </label>
+      {% endif %}
+    </div>
+
+    <div class="bulk-episode-select-list">
+      {% for episode in episodes %}
+      <label class="bulk-episode-option">
+        <input type="checkbox" value="{{ episode.id }}" data-episode-select>
+        <span class="code">{{ episode.display_code }}</span>
+        <span>{{ episode.title }}</span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="bulk-copy-options">
+      <label class="check-field">
+        {{ bulk_form.copy_description() }}
+        <span class="check-ui" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg></span>
+        <span class="check-copy"><span>Copy description</span><small>Overwrite each episode synopsis.</small></span>
+      </label>
+      <label class="check-field">
+        {{ bulk_form.copy_age_rating() }}
+        <span class="check-ui" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg></span>
+        <span class="check-copy"><span>Copy age rating</span><small>Apply the show rating.</small></span>
+      </label>
+      <label class="check-field">
+        {{ bulk_form.copy_published() }}
+        <span class="check-ui" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg></span>
+        <span class="check-copy"><span>Copy publish state</span><small>Publish or unpublish together.</small></span>
+      </label>
+    </div>
+
+    <div class="form-grid">
+      <div class="span-2">{{ field(bulk_form.description, placeholder="Show description to copy…") }}</div>
+      <div class="field">
+        <label class="field-label" for="bulk-age-rating">Age rating</label>
+        <select class="input" id="bulk-age-rating" name="age_rating">
+          {% for value, label in bulk_form.age_rating.choices %}
+          <option value="{{ value }}" {% if bulk_form.age_rating.data == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <span class="field-label">Publish state</span>
+        <label class="check-field">
+          {{ bulk_form.published() }}
+          <span class="check-ui" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg></span>
+          <span class="check-copy"><span>Published</span><small>Used when “Copy publish state” is checked.</small></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="form-actions-bar" style="margin-top:0">
+      <button class="btn btn-soft" type="submit">Apply to selected content</button>
+      <span class="hint">Choose “Only the show” to save metadata without touching episodes.</span>
+    </div>
+  </form>
+</section>
+
+<section class="admin-panel danger-zone">
+  <div class="admin-panel-head">
+    <div>
+      <h2>Delete show</h2>
+      <p>Remove this series, every season and every episode.</p>
+    </div>
+  </div>
+  <p>This permanently deletes all videos, thumbnails, trailers, subtitles and preview frames belonging to {{ show.title }}. This cannot be undone.</p>
+  <form method="post" action="{{ url_for('admin.show_delete', show_id=show.id) }}" data-confirm="Delete “{{ show.title }}” and all of its seasons, episodes and uploaded files? This cannot be undone.">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-danger" type="submit">Delete this show</button>
+  </form>
+</section>
+{% endblock %}

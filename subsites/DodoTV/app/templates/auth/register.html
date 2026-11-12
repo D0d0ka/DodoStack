@@ -1,0 +1,23 @@
+{% extends "auth/_base.html" %}
+{% from "_macros.html" import field %}
+{% block title %}Create account — {{ site.site_name }}{% endblock %}
+{% block form_content %}
+<h1>Start watching.</h1>
+<p>Create your free {{ site.site_name }} account. No credit card, no noise — just great stories.</p>
+
+<form method="post" action="{{ url_for('auth.register') }}" novalidate>
+  {{ form.hidden_tag() }}
+  {{ field(form.username, placeholder="Choose a username") }}
+  {{ field(form.email, placeholder="you@example.com") }}
+  {{ field(form.password, placeholder="At least 8 characters") }}
+  {{ field(form.confirm_password, placeholder="Repeat your password") }}
+  <button class="btn btn-primary btn-lg btn-block" type="submit">Create account</button>
+</form>
+
+<div class="auth-note">
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg>
+  Your password is hashed and never stored in plain text. Administrators are created separately through the secure CLI.
+</div>
+
+<p class="auth-switch">Already have an account? <a href="{{ url_for('auth.login') }}">Sign in</a></p>
+{% endblock %}

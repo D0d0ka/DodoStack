@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% from "_macros.html" import card, empty_state, pagination %}
+{% block title %}
+  {% if q %}Search “{{ q }}”{% elif genre %}{{ genre.name }}{% elif content_type == 'movie' %}Movies{% elif content_type == 'show' %}TV Shows{% else %}Browse{% endif %} — {{ site.site_name }}
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  <header class="page-head">
+    <div class="page-head-top">
+      <div>
+        <span class="eyebrow">{% if q %}Search the catalog{% else %}Find something great{% endif %}</span>
+        <h1>
+          {% if q %}Results for “{{ q }}”
+          {% elif genre %}{{ genre.name }}
+          {% elif content_type == 'movie' %}Movies
+          {% elif content_type == 'show' %}TV Shows
+          {% else %}Browse everything{% endif %}
+        </h1>
+        <p class="lede">
+          {% if q %}Movies and TV shows matching your search, newest first.
+          {% elif genre %}Every {{ genre.name|lower }} title in the Dodo TV catalog.
+          {% else %}Films and series across every genre, ready when you are.{% endif %}
+        </p>
+      </div>
+      <span class="result-count"><strong>{{ total }}</strong> title{{ '' if total == 1 else 's' }}</span>
+    </div>
+
+    <form class="filter-panel" method="get" action="{{ url_for('main.browse') }}">
+      <div class="filter-grid">
+        <div class="field filter-field-search" style="margin:0">
+          <label class="field-label" for="filter-q">Search</label>
+          <div class="filter-search-wrap">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 21l-4.35-4.35M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z"/></svg>
+            <input class="input" id="filter-q" type="search" name="q" value="{{ q }}" placeholder="Search by title" maxlength="100">
+          </div>
+        </div>
+        <div class="field" style="margin:0">
+          <label class="field-label" for="filter-type">Type</label>
+          <select class="input" id="filter-type" name="type">
+            <option value="all" {% if content_type == 'all' %}selected{% endif %}>Movies & TV</option>
+            <option value="movie" {% if content_type == 'movie' %}selected{% endif %}>Movies only</option>
+            <option value="show" {% if content_type == 'show' %}selected{% endif %}>TV shows only</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0">
+          <label class="field-label" for="filter-genre">Genre</label>
+          <select class="input" id="filter-genre" name="genre">
+            <option value="">All genres</option>
+            {% for item in genres %}
+              <option value="{{ item.slug }}" {% if genre and genre.id == item.id %}selected{% endif %}>{{ item.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field" style="margin:0">
+          <label class="field-label" for="filter-year">Release year</label>
+          <select class="input" id="filter-year" name="year">
+            <option value="">Any year</option>
+            {% for item in years %}
+              <option value="{{ item }}" {% if year == item %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field filter-submit" style="margin:0">
+          <label class="field-label" for="filter-sort">Sort</label>
+          <div style="display:flex;gap:8px">
+            <select class="input" id="filter-sort" name="sort">
+              <option value="recent" {% if sort == 'recent' %}selected{% endif %}>Recently added</option>
+              <option value="title" {% if sort == 'title' %}selected{% endif %}>A → Z</option>
+              <option value="year" {% if sort == 'year' %}selected{% endif %}>Newest release</option>
+              <option value="oldest" {% if sort == 'oldest' %}selected{% endif %}>Oldest added</option>
+            </select>
+            <button class="btn btn-primary" type="submit">Apply</button>
+          </div>
+        </div>
+      </div>
+
+      {% if q or genre or year or content_type != 'all' %}
+      <div class="active-filters">
+        {% if q %}
+          {% set args = request.args.to_dict() %}{% set _ = args.pop('q') %}
+          <span class="filter-chip">“{{ q }}” <a href="{{ url_for('main.browse', **args) }}" aria-label="Clear search"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></a></span>
+        {% endif %}
+        {% if genre %}
+          {% set args = request.args.to_dict() %}{% set _ = args.pop('genre') %}
+          <span class="filter-chip">{{ genre.name }} <a href="{{ url_for('main.browse', **args) }}" aria-label="Clear genre"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></a></span>
+        {% endif %}
+        {% if year %}
+          {% set args = request.args.to_dict() %}{% set _ = args.pop('year') %}
+          <span class="filter-chip">{{ year }} <a href="{{ url_for('main.browse', **args) }}" aria-label="Clear year"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></a></span>
+        {% endif %}
+        {% if content_type != 'all' %}
+          {% set args = request.args.to_dict() %}{% set _ = args.pop('type') %}
+          <span class="filter-chip">{{ 'Movies' if content_type == 'movie' else 'TV shows' }} <a href="{{ url_for('main.browse', **args) }}" aria-label="Clear type"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></a></span>
+        {% endif %}
+        <a class="text-link" href="{{ url_for('main.browse') }}">Clear all</a>
+      </div>
+      {% endif %}
+    </form>
+  </header>
+
+  <div class="browse-results">
+    {% if cards %}
+      <div class="content-grid">
+        {% for item in cards %}{{ card(item) }}{% endfor %}
+      </div>
+      {{ pagination(page, pages, prev_url, next_url) }}
+    {% else %}
+      {{ empty_state(
+        "Nothing matched",
+        "Try a different title, genre or release year. New stories are added all the time.",
+        url_for('main.browse'),
+        "Clear filters",
+        "search"
+      ) }}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

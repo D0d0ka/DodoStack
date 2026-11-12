@@ -1,0 +1,366 @@
+{% extends "admin/base.html" %}
+{% from "_macros.html" import field, checkbox %}
+{% block title %}{{ 'Edit ' ~ movie.title if movie else 'New movie' }}{% endblock %}
+{% block page_title %}{{ movie.title if movie else 'Add a movie' }}{% endblock %}
+{% block page_sub %}{{ 'Update metadata, media and subtitles' if movie else 'Upload a film and publish it to the catalog' }}{% endblock %}
+
+{% block topbar_actions %}
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.movies') }}">← All movies</a>
+  {% if movie %}
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('main.movie_detail', movie_id=movie.id) }}" target="_blank" rel="noopener">View public page ↗</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<form method="post" enctype="multipart/form-data" action="{{ url_for('admin.movie_edit', movie_id=movie.id) if movie else url_for('admin.movie_new') }}" data-upload-form novalidate>
+  {{ form.hidden_tag() }}
+  <div class="admin-editor-grid">
+    <div>
+      <section class="admin-panel">
+        <div class="admin-section">
+          <h2>Movie details</h2>
+          <p>This information appears on the movie page, search results and content cards.</p>
+        </div>
+        {{ field(form.title, placeholder="e.g. The Last Horizon") }}
+        {{ field(form.description, placeholder="A short synopsis of the film…") }}
+        <div class="form-grid">
+          {{ field(form.release_year, placeholder="2026") }}
+          {{ field(form.runtime, placeholder="Leave blank to read from the video") }}
+          {{ field(form.age_rating) }}
+          <div class="field">
+            <span class="field-label">Genres</span>
+            <div class="genre-check-grid">
+              {% for value, label in form.genre_ids.choices %}
+              <label class="choice-chip">
+                <input type="checkbox" name="genre_ids" value="{{ value }}" {% if form.genre_ids.data and value in form.genre_ids.data %}checked{% endif %}>
+                <span>{{ label }}</span>
+              </label>
+              {% else %}
+              <p class="muted" style="font-size:.78rem">No genres are available.</p>
+              {% endfor %}
+            </div>
+            {% for error in form.genre_ids.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+          </div>
+        </div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="admin-section">
+          <h2>Video files</h2>
+          <p>MP4, M4V, MOV, WebM, MKV, OGV and AVI are supported. Videos are probed with FFprobe on upload.</p>
+        </div>
+
+        {% if movie and movie.video_path %}
+        <div class="current-media">
+          <span class="media-icon">
+            <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3V9Z"/></svg>
+          </span>
+          <div class="current-media-copy">
+            <strong>Current movie video</strong>
+            <span title="{{ movie.video_path }}">{{ movie.video_path }}</span>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="field {% if form.video.errors %}has-error{% endif %}">
+          <label class="file-drop">
+            <input type="file" name="video" accept="video/*">
+            <span class="file-drop-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+            </span>
+            <strong>{{ 'Replace movie video' if movie and movie.video_path else 'Upload movie video' }}</strong>
+            <small class="file-drop-filename" data-empty="No file selected">No file selected</small>
+          </label>
+          {% for error in form.video.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        </div>
+
+        {% if movie and movie.trailer_path %}
+        <div class="current-media">
+          <span class="media-icon">
+            <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M9 9l6 3-6 3V9Z"/></svg>
+          </span>
+          <div class="current-media-copy">
+            <strong>Trailer attached</strong>
+            <span title="{{ movie.trailer_path }}">{{ movie.trailer_path }}</span>
+          </div>
+          <div class="current-media-actions">
+            <button class="mini-btn danger" type="submit" form="remove-trailer-form">Remove</button>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="field {% if form.trailer.errors %}has-error{% endif %}">
+          <label class="file-drop">
+            <input type="file" name="trailer" accept="video/*">
+            <span class="file-drop-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 5h16v14H4z"/><path d="M9 9l6 3-6 3V9Z"/></svg>
+            </span>
+            <strong>{{ 'Replace trailer' if movie and movie.trailer_path else 'Upload a trailer (optional)' }}</strong>
+            <small class="file-drop-filename" data-empty="No file selected">No file selected</small>
+          </label>
+          {% for error in form.trailer.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.thumbnail.errors %}has-error{% endif %}">
+          <label class="file-drop">
+            <input type="file" name="thumbnail" accept="image/*" data-image-input="#poster-preview">
+            <span class="file-drop-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5L5 20"/></svg>
+            </span>
+            <strong>{{ 'Replace poster' if movie and movie.poster_path else 'Upload a poster (optional)' }}</strong>
+            <small class="file-drop-filename" data-empty="No file selected">No file selected</small>
+          </label>
+          {% for error in form.thumbnail.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        </div>
+        <p class="field-hint">Poster images should be at least 100×100. If you skip this, choose one of the generated preview frames after saving.</p>
+      </section>
+
+      <div class="form-actions-bar">
+        <button class="btn btn-primary" type="submit">{{ 'Save changes' if movie else 'Create movie' }}</button>
+        <a class="btn btn-ghost" href="{{ url_for('admin.movies') }}">Cancel</a>
+        <span class="spacer"></span>
+        <span class="hint">{% if not movie %}Preview frames are generated automatically after the first upload.{% endif %}</span>
+      </div>
+    </div>
+
+    <aside class="admin-editor-side">
+      <section class="admin-panel">
+        <div class="admin-panel-head">
+          <div>
+            <h2>Poster</h2>
+            <p>Shown on cards, heroes and detail pages.</p>
+          </div>
+        </div>
+        <div class="poster-preview">
+          {% if movie and movie.poster_path %}
+            <img id="poster-preview" src="{{ movie.poster_path|media }}" alt="{{ movie.title }} poster">
+          {% else %}
+            <span class="poster-fallback">No poster</span>
+          {% endif %}
+          <div>
+            <strong>{{ 'Poster uploaded' if movie and movie.poster_path else 'No poster selected' }}</strong>
+            <span>Upload a custom image or pick a frame from the video below.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="admin-panel-head">
+          <div>
+            <h2>Visibility</h2>
+            <p>Control where this movie appears.</p>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          {{ checkbox(form.published, 'Publishing requires a video file and a poster.') }}
+          {{ checkbox(form.featured, 'Featured titles appear in the homepage hero carousel.') }}
+        </div>
+      </section>
+
+      {% if movie %}
+      <section class="admin-panel">
+        <div class="admin-panel-head">
+          <div>
+            <h2>Media status</h2>
+            <p>Everything a viewer needs to press play.</p>
+          </div>
+        </div>
+        <div class="info-row"><span>Video</span><span>{{ 'Ready' if movie.video_path else 'Missing' }}</span></div>
+        <div class="info-row"><span>Poster</span><span>{{ 'Ready' if movie.poster_path else 'Missing' }}</span></div>
+        <div class="info-row"><span>Trailer</span><span>{{ 'Ready' if movie.trailer_path else 'None' }}</span></div>
+        <div class="info-row"><span>Preview frames</span><span>{{ frames|length }}</span></div>
+        <div class="info-row"><span>Subtitles</span><span>{{ movie.subtitles|length }}</span></div>
+        <div class="info-row"><span>Updated</span><span>{{ movie.updated_at|timeago }}</span></div>
+      </section>
+      {% endif %}
+    </aside>
+  </div>
+</form>
+
+{% if movie %}
+<form id="remove-trailer-form" method="post" action="{{ url_for('admin.movie_remove_trailer', movie_id=movie.id) }}" data-confirm="Remove the trailer from this movie? The file will be deleted." style="display:none">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+</form>
+
+<div class="admin-editor-grid" style="margin-top:18px">
+  <div>
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Preview frames</h2>
+          <p>Generated from the movie video. Pick one to use as the poster.</p>
+        </div>
+        {% if movie.video_path %}
+        <form method="post" action="{{ url_for('admin.movie_generate_frames', movie_id=movie.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-ghost btn-sm" type="submit">{{ 'Regenerate frames' if frames else 'Generate frames' }}</button>
+        </form>
+        {% endif %}
+      </div>
+
+      {% if frames %}
+      <div class="frame-grid">
+        {% for frame in frames %}
+        <article class="frame-card">
+          <img src="{{ frame.path|media }}" alt="Preview frame at {{ frame.timestamp|duration }}" loading="lazy">
+          <span class="frame-time">{{ frame.timestamp|duration }}</span>
+          <div class="frame-actions">
+            <form method="post" action="{{ url_for('admin.movie_select_frame', movie_id=movie.id, asset_id=frame.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn success" type="submit">Use as poster</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.movie_delete_frame', movie_id=movie.id, asset_id=frame.id) }}" data-confirm="Delete this preview frame?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn danger" type="submit" aria-label="Delete preview frame">×</button>
+            </form>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="frame-empty">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5L5 20"/></svg>
+        <p>{% if movie.video_path %}No preview frames have been generated yet. Use “Generate frames” above.{% else %}Upload a movie video to generate preview frames.{% endif %}</p>
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Trailer subtitles</h2>
+          <p>WebVTT tracks shown inside the trailer player.</p>
+        </div>
+      </div>
+      {% if movie.trailer_path %}
+        {% if movie.trailer_subtitles %}
+        <div class="subtitle-list">
+          {% for subtitle in movie.trailer_subtitles|sort(attribute='label') %}
+          <div class="subtitle-row">
+            <span class="lang">{{ subtitle.language }}</span>
+            <div class="subtitle-row-copy">
+              <strong>{{ subtitle.label }}</strong>
+              <span>{{ subtitle.file_path }}{% if subtitle.is_default %} · Default track{% endif %}</span>
+            </div>
+            <div class="subtitle-row-actions">
+              {% if not subtitle.is_default %}
+              <form method="post" action="{{ url_for('admin.trailer_subtitle_make_default', kind='movie', content_id=movie.id, subtitle_id=subtitle.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="mini-btn" type="submit">Make default</button>
+              </form>
+              {% endif %}
+              <form method="post" action="{{ url_for('admin.trailer_subtitle_delete', kind='movie', content_id=movie.id, subtitle_id=subtitle.id) }}" data-confirm="Delete the "{{ subtitle.label }}" trailer subtitle?">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="mini-btn danger" type="submit">Delete</button>
+              </form>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="muted" style="font-size:.78rem">No trailer subtitle tracks yet. Upload a .vtt file below.</p>
+        {% endif %}
+
+        <form class="subtitle-add" method="post" enctype="multipart/form-data" action="{{ url_for('admin.trailer_subtitle_add', kind='movie', content_id=movie.id) }}">
+          {{ trailer_subtitle_form.hidden_tag() }}
+          <h3>Add a trailer subtitle track</h3>
+          <div class="subtitle-add-grid">
+            {{ field(trailer_subtitle_form.language, placeholder="en") }}
+            {{ field(trailer_subtitle_form.label, placeholder="English") }}
+            <div class="field {% if trailer_subtitle_form.file.errors %}has-error{% endif %}">
+              <label class="field-label" for="movie-trailer-subtitle-file">WebVTT file</label>
+              <input class="input" id="movie-trailer-subtitle-file" type="file" name="file" accept=".vtt,text/vtt">
+              {% for error in trailer_subtitle_form.file.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div>
+              <label class="check-field" style="padding:10px 12px">
+                {{ trailer_subtitle_form.is_default() }}
+                <span class="check-ui" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg></span>
+                <span class="check-copy"><span>Default</span></span>
+              </label>
+            </div>
+            <button class="btn btn-soft btn-sm" type="submit">Add track</button>
+          </div>
+        </form>
+      {% else %}
+        <p class="muted" style="font-size:.78rem">Upload a trailer first, then you can attach subtitle tracks to it.</p>
+      {% endif %}
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Subtitles</h2>
+          <p>WebVTT tracks appear in the player's subtitle menu.</p>
+        </div>
+      </div>
+      {% if movie.subtitles %}
+      <div class="subtitle-list">
+        {% for subtitle in movie.subtitles|sort(attribute='label') %}
+        <div class="subtitle-row">
+          <span class="lang">{{ subtitle.language }}</span>
+          <div class="subtitle-row-copy">
+            <strong>{{ subtitle.label }}</strong>
+            <span>{{ subtitle.file_path }}{% if subtitle.is_default %} · Default track{% endif %}</span>
+          </div>
+          <div class="subtitle-row-actions">
+            {% if not subtitle.is_default %}
+            <form method="post" action="{{ url_for('admin.subtitle_make_default', kind='movie', content_id=movie.id, subtitle_id=subtitle.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn" type="submit">Make default</button>
+            </form>
+            {% endif %}
+            <form method="post" action="{{ url_for('admin.subtitle_delete', kind='movie', content_id=movie.id, subtitle_id=subtitle.id) }}" data-confirm="Delete the “{{ subtitle.label }}” subtitle track?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="mini-btn danger" type="submit">Delete</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted" style="font-size:.78rem">No subtitle tracks yet. Upload a .vtt file below.</p>
+      {% endif %}
+
+      <form class="subtitle-add" method="post" enctype="multipart/form-data" action="{{ url_for('admin.subtitle_add', kind='movie', content_id=movie.id) }}">
+        {{ subtitle_form.hidden_tag() }}
+        <h3>Add a subtitle track</h3>
+        <div class="subtitle-add-grid">
+          {{ field(subtitle_form.language, placeholder="en") }}
+          {{ field(subtitle_form.label, placeholder="English") }}
+          <div class="field {% if subtitle_form.file.errors %}has-error{% endif %}">
+            <label class="field-label" for="movie-subtitle-file">WebVTT file</label>
+            <input class="input" id="movie-subtitle-file" type="file" name="file" accept=".vtt,text/vtt">
+            {% for error in subtitle_form.file.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+          </div>
+          <div>
+            <label class="check-field" style="padding:10px 12px">
+              {{ subtitle_form.is_default() }}
+              <span class="check-ui" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg></span>
+              <span class="check-copy"><span>Default</span></span>
+            </label>
+          </div>
+          <button class="btn btn-soft btn-sm" type="submit">Add track</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <aside class="admin-editor-side">
+    <section class="admin-panel danger-zone">
+      <div class="admin-panel-head">
+        <div>
+          <h2>Delete movie</h2>
+          <p>Permanently remove this title and every file that belongs to it.</p>
+        </div>
+      </div>
+      <p>This deletes the movie record, video, trailer, poster, preview frames and subtitle files. Watch history references will also be removed.</p>
+      <form method="post" action="{{ url_for('admin.movie_delete', movie_id=movie.id) }}" data-confirm="Delete “{{ movie.title }}” and all of its uploaded files? This cannot be undone.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-danger btn-block" type="submit">Delete this movie</button>
+      </form>
+    </section>
+  </aside>
+</div>
+{% endif %}
+{% endblock %}

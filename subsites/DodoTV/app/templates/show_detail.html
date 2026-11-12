@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% from "_macros.html" import content_row, empty_state, frame_gallery, icon_play, icon_info, rating_widget with context %}
+{% block title %}{{ show.title }} — {{ site.site_name }}{% endblock %}
+{% block body_class %}detail-page{% endblock %}
+
+{% block content %}
+<section class="detail-hero">
+  {% if poster %}<div class="detail-backdrop" style="background-image: url('{{ poster }}')"></div>{% endif %}
+  <div class="container detail-inner">
+    <div class="detail-poster">
+      {% if poster %}
+        <img src="{{ poster }}" alt="{{ show.title }} poster">
+      {% else %}
+        <span class="card-fallback" aria-hidden="true">{{ show.title[:1]|upper }}</span>
+      {% endif %}
+    </div>
+    <div class="detail-copy">
+      <span class="eyebrow">Series{% if show.featured %} · Featured{% endif %}</span>
+      <h1>{{ show.title }}</h1>
+      <div class="detail-meta">
+        {% if show.release_year %}<span>{{ show.release_year }}</span><span class="dot"></span>{% endif %}
+        <span>{{ show.season_count }} season{{ '' if show.season_count == 1 else 's' }}</span><span class="dot"></span>
+        <span>{{ episode_count }} episode{{ '' if episode_count == 1 else 's' }}</span>
+        {% if total_runtime_display %}<span class="dot"></span><span>{{ total_runtime_display }} total</span>{% endif %}
+        <span class="dot"></span>
+        <span class="rating">{{ show.age_rating }}</span>
+        {% if show.genres %}<span class="dot"></span><span>{{ show.genres|map(attribute='name')|join(' · ') }}</span>{% endif %}
+        {% if not show.published %}<span class="dot"></span><span class="badge-draft">DRAFT</span>{% endif %}
+      </div>
+      {% if show.description %}<p class="detail-desc">{{ show.description }}</p>{% endif %}
+      {% if show.genres %}
+      <div class="detail-genres">
+        <div class="genre-chips">
+          {% for genre in show.genres %}<a class="chip" href="{{ url_for('main.browse', genre=genre.slug) }}">{{ genre.name }}</a>{% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="detail-actions">
+        {% if show.first_episode() %}
+          <a class="btn btn-primary btn-lg" href="{{ watch_url }}">{{ icon_play() }} Play first episode</a>
+        {% else %}
+          <span class="btn btn-ghost btn-lg is-disabled">Episodes coming soon</span>
+        {% endif %}
+        {% if trailer_url %}
+          <button type="button" class="btn btn-ghost btn-lg" data-trailer="{{ trailer_url }}" data-trailer-title="{{ show.title }} — Trailer"{% if trailer_subtitles %} data-trailer-subtitles='{{ trailer_subtitles|tojson }}'{% endif %}>{{ icon_info() }} Watch trailer{% if trailer_subtitles %} with subtitles{% endif %}</button>
+        {% endif %}
+        {% if admin_preview %}
+          <a class="btn btn-ghost btn-lg" href="{{ url_for('admin.show_edit', show_id=show.id) }}">Edit show</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="container detail-body">
+  <div class="detail-columns">
+    <div>
+      {% if seasons %}
+        {% for season, episodes in seasons %}
+        <section class="season-block reveal">
+          <div class="season-head">
+            <div>
+              <h2>{{ season.display_title }}</h2>
+              {% if season.number == 0 %}<p class="muted" style="font-size:.8rem;margin-top:4px">Bonus content &amp; special episodes</p>
+              {% elif season.description %}<p class="muted" style="font-size:.85rem;margin-top:5px">{{ season.description }}</p>{% endif %}
+            </div>
+            <span>{{ episodes|length }} episode{{ '' if episodes|length == 1 else 's' }}</span>
+          </div>
+          <div class="episode-grid">
+            {% for episode in episodes %}
+            <a class="episode-card" href="{{ url_for('main.watch_episode', episode_id=episode.id) }}" aria-label="Play {{ episode.title }}">
+              <div class="episode-thumb">
+                {% set thumb = episode.thumbnail_path|media or poster %}
+                {% if thumb %}<img src="{{ thumb }}" alt="" loading="lazy">{% else %}<span class="thumb-fallback">No preview</span>{% endif %}
+                <span class="episode-play"><span>{{ icon_play() }}</span></span>
+              </div>
+              <div class="episode-info">
+                <span class="episode-code">{{ episode.display_code }}{% if not episode.published %} · DRAFT{% endif %}</span>
+                <span class="episode-title">{{ episode.title }}</span>
+                <span class="episode-meta">{{ episode.runtime_display or 'Runtime pending' }}</span>
+                {% if progress.get(episode.id) %}
+                  <span class="episode-progress" aria-hidden="true"><span style="width: {{ progress[episode.id] }}%"></span></span>
+                {% endif %}
+              </div>
+            </a>
+            {% endfor %}
+          </div>
+        </section>
+        {% endfor %}
+      {% else %}
+        {{ empty_state(
+          "No episodes yet",
+          "This series has no published episodes. Check back soon or add episodes in the admin studio.",
+          url_for('admin.show_edit', show_id=show.id) if admin_preview else None,
+          "Manage episodes" if admin_preview else None,
+          "spark"
+        ) }}
+      {% endif %}
+
+      {% if related %}
+        <div style="margin-top:30px">
+          {{ content_row("More series like this", related, "related-shows", url_for('main.browse', type='show')) }}
+        </div>
+      {% endif %}
+    </div>
+
+    <aside class="info-panel">
+      <h3>Series details</h3>
+      <div class="info-row"><span>Type</span><span>TV series</span></div>
+      <div class="info-row"><span>Release year</span><span>{{ show.release_year or '—' }}</span></div>
+      <div class="info-row"><span>Seasons</span><span>{{ show.season_count }}</span></div>
+      <div class="info-row"><span>Episodes</span><span>{{ episode_count }}</span></div>
+      {% if total_runtime_display %}<div class="info-row"><span>Total runtime</span><span>{{ total_runtime_display }}</span></div>{% endif %}
+      <div class="info-row"><span>Age rating</span><span>{{ show.age_rating }}</span></div>
+      {% if show.genres %}<div class="info-row"><span>Genres</span><span>{{ show.genres|map(attribute='name')|join(', ') }}</span></div>{% endif %}
+      <div class="info-row"><span>Added</span><span>{{ show.created_at|timeago }}</span></div>
+      <div class="info-row"><span>Trailer</span><span>{{ 'Available' if show.trailer_path else 'Not available' }}</span></div>
+      <div class="info-row"><span>Status</span><span>{{ 'Published' if show.published else 'Draft' }}</span></div>
+    </aside>
+  </div>
+
+  {{ frame_gallery(gallery, "show-gallery", "Frames from " ~ show.title) }}
+
+  {{ rating_widget(rating, url_for('main.rate_show', show_id=show.id), url_for('auth.login', next=request.path), 'series') }}
+</div>
+{% endblock %}

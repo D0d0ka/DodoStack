@@ -1,0 +1,37 @@
+/* Player-only refinements loaded on the watch page */
+.player-shell:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  aspect-ratio: auto;
+  border-radius: 0;
+  background: #000;
+}
+.player-shell:fullscreen video { height: 100vh; }
+.player-shell:fullscreen .player-controls { padding-bottom: 26px; }
+.player-shell:fullscreen .player-topbar { padding-top: 28px; }
+
+.player-shell.not-started .big-play { opacity: 1; transform: scale(1); }
+
+/* Keep native controls hidden but retain captions rendering */
+.player-shell video::-webkit-media-controls { display: none !important; }
+.player-shell video::-webkit-media-text-track-container { font-family: inherit; }
+.player-shell video::-webkit-media-text-track-display {
+  background: rgba(3, 7, 15, .8) !important;
+  border-radius: 5px;
+  padding: 4px 9px;
+}
+
+/* Seek target is taller than the visual bar for comfortable tapping */
+.seek-bar::before {
+  content: "";
+  position: absolute;
+  inset: -8px 0;
+}
+
+@media (max-width: 768px) {
+  .player-shell { max-height: calc(100svh - var(--nav-h)); }
+  .player-menu { right: 8px; bottom: 62px; }
+  .seek-tooltip { display: none; }
+  .player-controls { padding-bottom: 6px; }
+}

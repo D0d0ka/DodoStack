@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Doodle Admin</title>
+	<link rel="icon" type="image/png" href="dodo.png" />
+	<link rel="stylesheet" href="{{ admin_base }}/style.css" />
+</head>
+<body class="admin-page" data-admin-base="{{ admin_base }}">
+    {{ admin_navigation }}
+	<header class="site-header">
+		<div class="header-inner admin-header-inner">
+			<a href="{{ url_for('index') }}" class="brand" aria-label="Doodle home">
+				<img src="{{ admin_base }}/dodo.png" alt="" class="brand-mascot" />
+				<span>Doodle</span>
+			</a>
+			<div class="admin-header-actions">
+				<span class="crawl-badge hidden" id="crawlBadge" title="Crawl in progress"></span>
+			</div>
+		</div>
+	</header>
+
+	<main class="admin-main hidden" id="adminDashboard">
+		<section class="admin-hero">
+			<div>
+				<p class="admin-eyebrow">Admin mode</p>
+				<h1>Admin dashboard</h1>
+				<p class="admin-subtitle">Siin saad hallata crawlerit, admin seadeid ja search history kirjeid.</p>
+			</div>
+			<a href="{{ url_for('index') }}" class="btn-secondary admin-home-link">Tagasi otsingusse</a>
+            <a href="{{ url_for('search_page') }}" class="btn-secondary">Preview hidden results</a>
+		</section>
+
+		<section class="admin-grid">
+			<article class="admin-card">
+				<div class="admin-card-head">
+					<div>
+						<p class="admin-card-kicker">Seaded</p>
+						<h2>Admin settings</h2>
+					</div>
+				</div>
+				<div class="admin-card-body admin-form-grid">
+					<label class="settings-label" for="aiModelInput">AI mudel (Ollama)</label>
+					<input type="text" id="aiModelInput" placeholder="nt. phi, llama3, mistral" />
+
+					<label class="settings-label" for="newPasswordInput">Muuda parooli</label>
+					<input type="password" id="newPasswordInput" placeholder="Uus parool (min 4 tähemärki)" autocomplete="new-password" />
+					<input type="password" id="confirmPasswordInput" placeholder="Korda parooli" autocomplete="new-password" />
+
+					<div class="admin-feedback hidden" id="adminSettingsFeedback"></div>
+				</div>
+				<div class="admin-card-actions">
+					<button class="btn-primary" id="saveAdminSettingsBtn" type="button">Salvesta seaded</button>
+				</div>
+			</article>
+
+			<article class="admin-card admin-card--wide">
+				<div class="admin-card-head">
+					<div>
+						<p class="admin-card-kicker">Crawler</p>
+						<h2>URL queue ja crawl</h2>
+					</div>
+					<button class="btn-icon" id="refreshQueueBtn" title="Refresh queue" type="button">↻</button>
+				</div>
+				<div class="admin-card-body">
+					<div class="crawl-note hidden" id="crawlNote" aria-live="polite"></div>
+
+					<div class="add-url-area admin-inline-form">
+						<textarea id="urlsInput"
+											placeholder="https://example.com&#10;https://another-site.com&#10;&#10;One URL per line"
+											rows="5"></textarea>
+						<button class="btn-primary" id="addUrlBtn" type="button">Lisa URL-id</button>
+					</div>
+					<div class="add-url-feedback hidden" id="addUrlFeedback" aria-live="polite"></div>
+
+					<div class="depth-row">
+						<label for="depthSelect">Crawl depth:</label>
+						<select id="depthSelect">
+							<option value="0">0 - Single page only</option>
+							<option value="1" selected>1 - Follow links (same domain)</option>
+							<option value="2">2 - Two levels deep</option>
+							<option value="3">3 - Three levels deep</option>
+						</select>
+					</div>
+
+					<div class="queue-section">
+						<div class="queue-header">
+							<h3>Queue <span class="badge" id="queueCount">0</span></h3>
+						</div>
+						<ul class="queue-list" id="queueList">
+							<li class="queue-empty">No URLs queued</li>
+						</ul>
+					</div>
+
+					<div class="status-bar">
+						<span class="status-dot" id="statusDot" data-state="idle"></span>
+						<span id="statusText">Idle</span>
+						<span class="status-count">Crawled pages: <strong id="crawledPagesCount">0</strong></span>
+					</div>
+
+					<div class="crawl-log hidden" id="crawlLog" aria-live="polite"></div>
+				</div>
+				<div class="admin-card-actions">
+					<button class="btn-secondary" id="backfillMediaBtn" type="button">Backfill media</button>
+					<button class="btn-start" id="startCrawlBtn" type="button">Start crawling</button>
+				</div>
+			</article>
+
+			<article class="admin-card admin-card--wide">
+				<div class="admin-card-head">
+					<div>
+						<p class="admin-card-kicker">Search history</p>
+						<h2>History haldus</h2>
+					</div>
+					<button class="btn-secondary" id="clearSearchHistoryBtn" type="button">Kustuta kogu history</button>
+				</div>
+				<div class="admin-card-body">
+					<div class="admin-inline-form admin-inline-form--history">
+						<input type="text" id="historyQueryInput" placeholder="Lisa uus search history kirje" />
+						<input type="number" id="historyCountInput" min="1" value="1" />
+						<button class="btn-primary" id="addHistoryBtn" type="button">Lisa</button>
+					</div>
+					<div class="history-toolbar">
+						<input type="search" id="historySearchInput" placeholder="Otsi history kirjetest" />
+						<select id="historySortSelect" aria-label="Sorteeri history">
+							<option value="recent" selected>Uusim enne</option>
+							<option value="count">Enim kasutatud enne</option>
+							<option value="query">A-Z</option>
+						</select>
+					</div>
+					<div class="admin-feedback hidden" id="historyFeedback"></div>
+
+					<div class="history-list-wrap" id="historyListWrap">
+						<div class="history-list" id="historyList">
+							<div class="history-empty">History puudub.</div>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="admin-card admin-card--wide">
+				<div class="admin-card-head">
+					<div>
+						<p class="admin-card-kicker">Recommended</p>
+						<h2>Recommended tulemused</h2>
+					</div>
+					<button class="btn-secondary" id="clearRecommendedBtn" type="button">Kustuta kõik</button>
+				</div>
+				<div class="admin-card-body">
+					<div class="admin-inline-form admin-inline-form--recommended">
+						<input type="text" id="recommendedQueryInput" placeholder="Search query (nt minecraft mods)" />
+						<input type="text" id="recommendedTitleInput" placeholder="Pealkiri (valikuline)" />
+						<input type="url" id="recommendedUrlInput" placeholder="https://example.com/tulemus" />
+						<button class="btn-primary" id="addRecommendedBtn" type="button">Lisa</button>
+					</div>
+					<div class="history-toolbar">
+						<input type="search" id="recommendedSearchInput" placeholder="Otsi query või URL järgi" />
+					</div>
+					<div class="admin-feedback hidden" id="recommendedFeedback"></div>
+
+					<div class="history-list-wrap" id="recommendedListWrap">
+						<div class="history-list" id="recommendedAdminList">
+							<div class="history-empty">Recommended kirjeid ei ole.</div>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="admin-card admin-card--wide">
+				<div class="admin-card-head">
+					<div>
+						<p class="admin-card-kicker">Domeenid</p>
+						<h2>Domeenide haldus</h2>
+					</div>
+					<button class="btn-secondary" id="exportDomainsBtn" type="button">Lae alla .txt</button>
+				</div>
+				<div class="admin-card-body">
+
+					<p class="admin-card-kicker" style="margin-bottom:0.5rem;">Kustuta domeen</p>
+					<p style="font-size:0.85rem;color:var(--text-muted,#888);margin-bottom:0.75rem;">Kustutab kõik konkreetse domeeni lehed andmebaasist.</p>
+					<div class="admin-inline-form admin-inline-form--history">
+						<input type="text" id="deleteDomainInput" placeholder="nt. dodo.ee" />
+						<button class="btn-secondary" id="deleteDomainBtn" type="button">Kustuta domeen</button>
+					</div>
+					<div class="admin-feedback hidden" id="deleteDomainFeedback"></div>
+
+					<hr style="border:none;border-top:1px solid var(--border,#e5e7eb);margin:1.25rem 0;" />
+
+					<p class="admin-card-kicker" style="margin-bottom:0.5rem;">Recrawli domeen</p>
+					<p style="font-size:0.85rem;color:var(--text-muted,#888);margin-bottom:0.75rem;">Lisab kõik domeeni lehed crawl-järjekorda uuesti.</p>
+					<div class="admin-inline-form admin-inline-form--history">
+						<input type="text" id="recrawlDomainInput" placeholder="nt. dodo.ee" />
+						<button class="btn-primary" id="recrawlDomainBtn" type="button">Recrawli domeen</button>
+					</div>
+					<div class="admin-feedback hidden" id="recrawlDomainFeedback"></div>
+
+					<hr style="border:none;border-top:1px solid var(--border,#e5e7eb);margin:1.25rem 0;" />
+
+					<p class="admin-card-kicker" style="margin-bottom:0.5rem;">Peidetud domeenid</p>
+					<p style="font-size:0.85rem;color:var(--text-muted,#888);margin-bottom:0.75rem;">Neid domeene ei kuvata tavakasutajatele otsingu- ega recommended tulemustes. Admin mode's on need nähtavad.</p>
+					<div class="admin-inline-form admin-inline-form--history">
+						<input type="text" id="hiddenDomainInput" placeholder="nt. dodo.ee" />
+						<button class="btn-primary" id="addHiddenDomainBtn" type="button">Peida</button>
+					</div>
+					<div class="admin-feedback hidden" id="hiddenDomainFeedback"></div>
+					<div class="history-list-wrap" id="hiddenDomainsListWrap" style="margin-top:0.75rem;">
+						<div class="history-list" id="hiddenDomainsList">
+							<div class="history-empty">Peidetud domeene pole.</div>
+						</div>
+					</div>
+				</div>
+			</article>
+		</section>
+	</main>
+
+	<script src="{{ admin_base }}/app.js"></script>
+</body>
+</html>
