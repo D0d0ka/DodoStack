@@ -127,3 +127,24 @@ h2 { margin: 7px 0 0; font: 700 20px/1.2 "Manrope", sans-serif; letter-spacing: 
   .add-form input { font-size: 12px; }
   .filters { gap: 16px; }
 }
+
+/* Keep the Todo workspace consistent with the main dashboard. */
+body { background: #f7f6ee; }
+.workspace-link {
+  color: var(--green-dark);
+  font-size: 12px;
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+.intro p, .filter-link, .empty-state p { color: #526759; }
+.todo-card { border-color: #dce3d5; }
+.task-row { gap: 12px; }
+.delete-form { opacity: 1; }
+.delete-button { min-width: 36px; min-height: 36px; color: #647468; }
+.signout-button { min-height: 36px; color: #486453; }
+a:focus-visible, button:focus-visible { outline: 3px solid #62874c; outline-offset: 3px; }
+@media (max-width: 480px) {
+  .topbar { flex-wrap: wrap; gap: 12px; }
+  .account-tools { flex-wrap: wrap; }
+  .workspace-link { font-size: 11px; }
+}

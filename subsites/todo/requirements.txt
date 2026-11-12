@@ -1,1 +1,3 @@
-Flask>=3.0,<4.0
+# Flask has been replaced by the standard-library Dodo framework.
+# Werkzeug remains only for validating password hashes from existing Todo installs.
+Werkzeug>=3.0,<4.0
