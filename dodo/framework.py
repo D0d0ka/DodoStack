@@ -13,7 +13,13 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qs, urlencode, urlsplit
 import html
+import logging
 import re
+
+from werkzeug.exceptions import RequestEntityTooLarge
+
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -102,23 +108,40 @@ class Application:
             request.workspace_url = auth.workspace_url
             request.user = auth.get_service_user(self.name, request.cookies.get("dodo_session"))
         if request.path.startswith("/static/"):
+            if request.method not in {"GET", "HEAD"}:
+                response = Response.text("This address accepts GET and HEAD.", 405)
+                response.headers["Allow"] = "GET, HEAD"
+                return response
             return self.static(request.path.removeprefix("/static/"))
+        allowed = set()
+        request_method = "GET" if request.method == "HEAD" else request.method
         for method, pattern, handler in self.routes:
             match = pattern.match(request.path)
-            if match and method == request.method:
+            if match:
+                allowed.add(method)
+            if match and method == request_method:
+                log.debug("Matched endpoint=%s service=%s", handler.__name__, self.name)
                 if getattr(handler, "requires_user", False) and request.user is None:
                     return auth.authorize_redirect(self.name, request)
                 response = handler(request, **{key: int(value) for key, value in match.groupdict().items()})
                 if isinstance(response, str):
                     response = Response.html(response)
                 return response
+        if allowed:
+            if "GET" in allowed:
+                allowed.add("HEAD")
+            response = Response.text("This address does not accept that HTTP method.", 405)
+            response.headers["Allow"] = ", ".join(sorted(allowed))
+            return response
         return Response.text("Not found", 404)
 
 
 def request_from_handler(handler: BaseHTTPRequestHandler) -> Request:
     parsed = urlsplit(handler.path)
     length = int(handler.headers.get("Content-Length", "0") or 0)
-    payload = handler.rfile.read(min(length, 1_000_000)) if length else b""
+    if length > 1_000_000:
+        raise RequestEntityTooLarge()
+    payload = handler.rfile.read(length) if length else b""
     form = parse_qs(payload.decode("utf-8", "replace")) if handler.command == "POST" else {}
     cookie = SimpleCookie()
     try:

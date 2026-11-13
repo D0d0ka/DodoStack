@@ -32,6 +32,11 @@ All services require a DodoStack account. Sign in with your username or email ad
 
 - `DODO_MIN_PASSWORD_LENGTH` sets the minimum length for new and changed passwords. The default is 8.
 - `DODO_PRIVATE=true` requires workspace approval for new accounts. Approve them in **Admin → Accounts**.
+- `DODO_DEBUG=true` enables detailed diagnostics on stderr after a restart. The default is `false`.
+
+### Debugging requests
+
+Every HTTP response carries an `X-Request-ID` that matches the server log. Error pages also show it on screen. Debug mode adds startup timings, host and route matching, authentication decisions, and exception stack frames to the HTTP status and duration logs. Request payloads, cookies, raw paths, query values, and exception messages stay out of the request logs.
 
 ### Access from another device
 
@@ -43,12 +48,12 @@ DODO_PORT=8000
 DODO_WORKSPACE_HOSTS=dodoai,192.168.0.11=dodostack.home.arpa
 ```
 
-Restart with `.venv/bin/python server.py`. In this example, you can open the workspace at `http://dodoai:8000` or `http://192.168.0.11:8000`. Each workspace address links to its own set of service hostnames. A DNS workspace name doubles as the service domain by default. For a workspace opened by IPv4 address, specify a separate service domain after `=`.
+Restart with `.venv/bin/python server.py`. In this example, the workspace opens at `http://dodoai:8000`, `http://192.168.0.11:8000`, and `http://dodostack.home.arpa:8000`. The domain after `=` is automatically registered as a workspace on the same browser-facing port. Both the IP and domain workspaces link to the same services. Those services use the domain workspace for sign-in.
 
-Configure DNS or the client device's hosts file so that `todo`, `doodle`, `dodobook`, `dodotv`, `dodokey`, and `dodocalender` under each service domain resolve to the server. For example, on the LAN you can add this hosts-file entry:
+Configure DNS or the client device's hosts file so that the service domain and its service subdomains resolve to the server. For example, on the LAN you can add this hosts-file entry:
 
 ```text
-192.168.0.11 todo.dodostack.home.arpa doodle.dodostack.home.arpa dodobook.dodostack.home.arpa dodotv.dodostack.home.arpa dodokey.dodostack.home.arpa dodocalender.dodostack.home.arpa
+192.168.0.11 dodostack.home.arpa todo.dodostack.home.arpa doodle.dodostack.home.arpa dodobook.dodostack.home.arpa dodotv.dodostack.home.arpa dodokey.dodostack.home.arpa dodocalender.dodostack.home.arpa
 ```
 
 For `dodoai`, point those service names under `dodoai` to the Pi's Tailscale IP. The workspace name resolving on Tailscale does not itself create DNS records for its service names. DodoKey's browser encryption requires a secure context such as localhost or HTTPS.

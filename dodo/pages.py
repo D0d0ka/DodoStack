@@ -1,7 +1,10 @@
 """English-language pages for the DodoStack workspace and shared sign-in."""
+from http import HTTPStatus
+import json
 from urllib.parse import urlencode
 
-from .framework import safe
+from .diagnostics import request_id
+from .framework import Response, safe
 
 SERVICE_DESCRIPTIONS = {
     "todo": "Capture tasks, see what’s left, and mark off what’s done.",
@@ -52,6 +55,58 @@ def header(account="", origin=""):
     {account}
   </div>
 </header>"""
+
+
+ERROR_MESSAGES = {
+    400: "Check the request and try again.",
+    401: "Sign in with an approved DodoStack account to continue.",
+    403: "You do not have access to this page or action.",
+    404: "The page may have moved or the address may be incorrect.",
+    405: "This address does not accept that HTTP method.",
+    413: "The request exceeds the allowed size.",
+    500: "DodoStack could not complete the request. Try again in a moment.",
+    501: "DodoStack does not support this HTTP method.",
+    503: "This service is temporarily unavailable. Try again in a moment.",
+}
+
+
+def error_response(status, *, title=None, detail=None, workspace_url="", service=None, api=False):
+    reason = HTTPStatus(status) if status in HTTPStatus else None
+    title = title or (reason.phrase if reason else "Request failed")
+    detail = detail or ERROR_MESSAGES.get(status) or (reason.description if reason else "Try again later.")
+    reference = request_id.get()
+    if api:
+        payload = {"error": detail, "status": status, "request_id": reference}
+        response = Response(json.dumps(payload).encode(), status, {"Content-Type": "application/json"})
+    else:
+        logo = f"{workspace_url}/static/branding/stack.png"
+        stylesheet = f"{workspace_url}/static/workspace.css"
+        if service == "dodokey":
+            logo = "/static/dodokey.png"
+            stylesheet = "/static/vault.css"
+        response = Response.html(f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{status} {safe(title)} · DodoStack</title>
+  <link rel="icon" type="image/png" href="{safe(logo)}">
+  <link rel="stylesheet" href="{safe(stylesheet)}">
+</head>
+<body>
+<main class="error-page">
+  <section class="error-card">
+    <img src="{safe(logo)}" width="56" height="56" alt="DodoStack">
+    <h1><span>{status}</span> {safe(title)}</h1>
+    <p>{safe(detail)}</p>
+    <a class="error-home" href="{safe(workspace_url)}/">Back to workspace</a>
+    <p class="error-reference">Request ID <code>{safe(reference)}</code></p>
+  </section>
+</main>
+</body>
+</html>""", status)
+    response.headers.update({"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+    return response
 
 
 def dashboard(user, services, *, private=False):
@@ -165,6 +220,7 @@ def sign_in_problem(service, message, service_url, origin):
     <h1>Sign-in interrupted</h1>
     <p>{safe(message)}</p>
     <a class="button primary" href="{safe(service_url)}">Return to {safe(service_name(service))}</a>
+    <p class="error-reference">Request ID <code>{safe(request_id.get())}</code></p>
   </section>
 </main>""", origin=origin)
 

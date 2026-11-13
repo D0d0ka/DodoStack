@@ -63,7 +63,7 @@ def resolve_path(relative_path: str | None) -> Path | None:
     try:
         candidate.relative_to(root)
     except ValueError:
-        log.warning("Blocked unsafe media path: %s", relative_path)
+        log.warning("Blocked unsafe media path")
         return None
     return candidate
 
@@ -277,9 +277,7 @@ def generate_frames(video_relative_path: str, prefix: str, count: int | None = N
                 }
             )
         else:
-            log.warning(
-                "Frame extraction failed at %.2fs: %s", timestamp, (result.stderr or "").strip()
-            )
+            log.warning("Frame extraction failed at %.2fs with exit code %s", timestamp, result.returncode)
 
     if not produced:
         shutil.rmtree(folder, ignore_errors=True)
@@ -425,8 +423,8 @@ def delete_relative(relative_path: str | None) -> None:
         return
     try:
         path.unlink()
-    except OSError as exc:  # pragma: no cover - filesystem edge case
-        log.warning("Could not delete %s: %s", path, exc)
+    except OSError:  # pragma: no cover - filesystem edge case
+        log.exception("Could not delete uploaded media")
 
 
 def delete_frame_folder(relative_path: str | None) -> None:

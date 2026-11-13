@@ -10,12 +10,7 @@ from bs4 import BeautifulSoup
 
 from .database import get_page_urls, replace_media_assets, upsert_page, url_exists
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s  %(levelname)-8s  %(message)s',
-    datefmt='%H:%M:%S',
-)
-logger = logging.getLogger('doodle.crawler')
+logger = logging.getLogger(__name__)
 
 # ── SSRF kaitse ────────────────────────────────────────────────────────────
 _PRIVATE_NETWORKS = [
@@ -94,7 +89,7 @@ class CrawlerManager:
             return False, 'Invalid URL'
 
         if not _is_ssrf_safe(hostname):
-            logger.warning('SSRF blocked (queue): %s', url)
+            logger.warning('SSRF blocked (queue)')
             return False, 'URL points to a private or reserved address — not allowed'
 
         with self._lock:
@@ -105,7 +100,7 @@ class CrawlerManager:
                 return False, 'URL has already been crawled'
             self._queue.append((url, 0))
 
-        logger.info('Queued: %s', url)
+        logger.debug('Queued URL host=%s', hostname)
         return True, 'URL added to queue'
 
     def get_queue(self) -> list[dict]:
@@ -123,7 +118,7 @@ class CrawlerManager:
             removed = before - len(self._queue)
 
         if removed > 0:
-            logger.info('Removed from queue: %s (x%d)', target, removed)
+            logger.debug('Removed %d queue entries', removed)
             return True, 'URL removed from queue'
         return False, 'URL not found in queue'
 
@@ -224,11 +219,11 @@ class CrawlerManager:
                 self._results.append({'url': url, 'success': ok, 'message': msg})
 
     def _crawl_one(self, url: str, depth: int, max_depth: int, visited: set[str]) -> tuple[bool, str]:
-        logger.info('Crawling (depth=%d): %s', depth, url)
+        logger.debug('Crawling URL depth=%d', depth)
         try:
             parsed_check = urlparse(url)
             if not _is_ssrf_safe(parsed_check.hostname or ''):
-                logger.warning('SSRF blocked (crawl): %s', url)
+                logger.warning('SSRF blocked (crawl)')
                 return False, 'Blocked — private or reserved address'
 
             resp = requests.get(
@@ -260,7 +255,7 @@ class CrawlerManager:
 
             assets = self._extract_media_assets(soup, resp.url, title)
             replace_media_assets(page_id, assets)
-            logger.info('Saved: %s', title[:60])
+            logger.debug('Saved crawled page id=%s', page_id)
 
             # recurse
             if depth < max_depth:
@@ -279,16 +274,16 @@ class CrawlerManager:
             return True, f'Saved — {title[:60]}'
 
         except requests.exceptions.Timeout:
-            logger.warning('Timeout: %s', url)
+            logger.warning('Crawl request timed out')
             return False, 'Request timed out'
         except requests.exceptions.ConnectionError:
-            logger.warning('Connection error: %s', url)
+            logger.warning('Crawl connection failed')
             return False, 'Connection error'
         except requests.exceptions.HTTPError as exc:
-            logger.warning('HTTP %s: %s', exc.response.status_code, url)
+            logger.warning('Crawl returned HTTP %s', exc.response.status_code)
             return False, f'HTTP {exc.response.status_code}'
         except Exception as exc:
-            logger.error('Unexpected error crawling %s: %s', url, exc)
+            logger.exception('Unexpected crawl error')
             return False, f'Error: {exc}'
 
     @staticmethod

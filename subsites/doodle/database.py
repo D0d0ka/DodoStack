@@ -3,8 +3,11 @@ import os
 import re
 import hashlib
 import json
+import logging
 from functools import lru_cache
 from urllib.parse import parse_qs, urlparse, parse_qsl, urlencode
+
+log = logging.getLogger(__name__)
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'doodle.db')
 SEARCH_CACHE_SIZE = 1024  # Suurendatud cache 256-lt 1024-le
@@ -256,8 +259,8 @@ def upsert_page(url: str, title: str, content: str) -> int | None:
         conn.commit()
         _invalidate_search_cache()
         return page_id
-    except Exception as exc:
-        print(f'[DB] Error inserting {url}: {exc}')
+    except Exception:
+        log.exception('Could not save crawled page')
         return None
     finally:
         conn.close()
@@ -297,8 +300,8 @@ def replace_media_assets(page_id: int, assets: list[dict]) -> int:
         conn.commit()
         _invalidate_search_cache()
         return len(rows)
-    except Exception as exc:
-        print(f'[DB] Error replacing media assets for page {page_id}: {exc}')
+    except Exception:
+        log.exception('Could not replace media assets for page id=%s', page_id)
         return 0
     finally:
         conn.close()

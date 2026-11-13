@@ -5,7 +5,7 @@ import json
 import os
 import time
 from functools import wraps
-from werkzeug.exceptions import BadRequest
+from werkzeug.exceptions import BadRequest, abort
 
 from . import database
 from .crawler import crawler_manager
@@ -1156,7 +1156,7 @@ def admin_page():
 @app.get('/<path:filename>')
 def static_files(filename):
     if filename not in {"app.js", "style.css", "dodo.png"}:
-        return Response("Not found", status=404)
+        abort(404)
     return send_from_directory(FRONTEND, filename)
 
 

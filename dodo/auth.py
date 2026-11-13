@@ -7,6 +7,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import re
 import secrets
 import sqlite3
@@ -16,6 +17,8 @@ from email_validator import EmailNotValidError, validate_email
 
 from .framework import Request, Response, redirect
 from . import pages
+
+log = logging.getLogger(__name__)
 
 
 def local_path(path: str) -> str:
@@ -236,10 +239,14 @@ class Identity:
     def session_user(self, token: str | None, audience: str):
         payload = self.accounts.read_claims(token, audience)
         if not payload or not self.accounts.is_current(payload):
+            log.debug("Session rejected audience=%s reason=%s", audience,
+                      "missing" if not token else "invalid_or_expired" if not payload else "revoked")
             return None
         user = self.accounts.account(int(payload["sub"]))
         if user and (audience == "server" or not self.account_destination(user)):
+            log.debug("Session accepted audience=%s", audience)
             return user
+        log.debug("Session rejected audience=%s reason=account_unavailable", audience)
         return None
 
     def issue_assertion(self, source_service: str, target_service: str, user: dict, claims: dict | None = None, ttl: int = 60):
@@ -272,6 +279,8 @@ class Identity:
         return redirect(f"{self.workspace_url}/auth/authorize?{query}")
 
     def handle_service(self, service: str, request: Request):
+        if request.path in {"/_auth/logout", "/_auth/complete", "/_auth/callback"}:
+            log.debug("Shared service authentication endpoint=%s service=%s", request.path, service)
         if request.path == "/_auth/logout":
             return Response(b"", 200, {"Content-Type": "text/html; charset=utf-8", "Set-Cookie": "dodo_session=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly", "Refresh": "0; url=/"})
         if request.path == "/_auth/complete":
@@ -283,6 +292,7 @@ class Identity:
         elif request.path == "/_auth/callback":
             ticket = self.accounts.read_claims(request.value("ticket"), "ticket:" + service)
             if not ticket or not self.accounts.is_current(ticket):
+                log.debug("Service sign-in ticket rejected service=%s", service)
                 return self.sign_in_problem(
                     service, "This sign-in link has expired. Start again from the service.", 400,
                 )
@@ -308,7 +318,7 @@ class Identity:
         response.headers.update({"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
         return response
 
-    def handle_main(self, request: Request):
+    def handle_main(self, request: Request, *, api=False):
         user = self.main_user(request)
         path = request.path
         if user and path != "/logout":
@@ -326,7 +336,9 @@ class Identity:
         if path == "/auth/authorize":
             service, target = request.value("service"), request.value("path", "/")
             if service not in self.services:
-                return Response.text("Unknown service", 404)
+                return pages.error_response(404, title="Unknown DodoStack service",
+                                            detail="The requested service is not registered in this workspace.",
+                                            workspace_url=self.workspace_url, api=api)
             if not target.startswith("/") or target.startswith("//"):
                 target = "/"
             if user:
@@ -365,6 +377,7 @@ class Identity:
                     user = self.accounts.account(authenticated["id"]) if authenticated else None
                     error = None if user else "The username, email or password is incorrect."
                 if not error:
+                    log.debug("Shared account %s accepted", mode)
                     version = self.accounts.session_version(user["id"])
                     request.set_cookie(self.main_session, self.accounts.issue({"sub": user["id"], "name": user["username"], "aud": "server", "ver": version, "exp": int(time.time()) + 30 * 86400}), max_age=30 * 86400)
                     destination = self.account_destination(user)
@@ -373,6 +386,7 @@ class Identity:
                     if service in self.services:
                         return self._issue_ticket(service, user, target)
                     return redirect("/")
+                log.debug("Shared account %s rejected", mode)
                 return self.auth_form(mode, service, target, error=error, fields=fields)
             if user:
                 return self._issue_ticket(service, user, target) if service in self.services else redirect("/")

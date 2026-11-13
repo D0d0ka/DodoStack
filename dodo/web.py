@@ -13,11 +13,14 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 from wtforms import Form
 from werkzeug.datastructures import CombinedMultiDict
-from werkzeug.exceptions import HTTPException, Forbidden, abort
+from werkzeug.exceptions import HTTPException, Forbidden, NotFound, abort
 from werkzeug.local import LocalProxy
 from werkzeug.routing import Map, Rule
 from werkzeug.utils import redirect, send_file as _file, send_from_directory as _directory
 from werkzeug.wrappers import Request, Response
+
+from .diagnostics import request_id
+from .pages import error_response
 
 _app = ContextVar("dodo_app")
 _request = ContextVar("dodo_request")
@@ -175,7 +178,7 @@ class WebApplication(Blueprint):
             finally:
                 _app.reset(token)
 
-    def serve(self, environ, start_response, *, path, identity, user, service, admin=False):
+    def serve(self, environ, start_response, *, path, identity, user, service, admin=False, api=False):
         incoming = Request(environ)
         incoming.max_content_length = self.config.get("MAX_CONTENT_LENGTH", 2 * 1024 * 1024)
         incoming.identity = identity
@@ -200,13 +203,17 @@ class WebApplication(Blueprint):
                 try:
                     endpoint, values = incoming.adapter.match(path, method=incoming.method)
                     incoming.endpoint = endpoint
+                    self.logger.debug("Matched endpoint=%s service=%s admin_mount=%s", endpoint, service, admin)
                     admin_endpoint = self.is_admin_endpoint(endpoint)
                     admin_asset = self.is_admin_asset(endpoint) and incoming.method in {"GET", "HEAD"}
                     if admin and not (admin_endpoint or admin_asset):
-                        return Response("Not found", status=404)(environ, start_response)
+                        self.logger.debug("Endpoint is outside the workspace admin mount")
+                        raise NotFound()
                     if not admin and admin_endpoint and not self.admin.on_service:
-                        return Response("Not found", status=404)(environ, start_response)
+                        self.logger.debug("Endpoint is available only on the workspace admin mount")
+                        raise NotFound()
                     if not same_origin(incoming):
+                        self.logger.debug("Rejected cross-origin request")
                         raise Forbidden()
                     if user and self.profile_loader:
                         incoming.profile = self.profile_loader(user) or Guest()
@@ -216,16 +223,30 @@ class WebApplication(Blueprint):
                     for callback in self.before:
                         result = callback()
                         if result is not None:
+                            self.logger.debug("Request handled by before_request=%s", callback.__name__)
                             break
                     if result is None:
                         result = self.view_functions[endpoint](**values)
                 except HTTPException as error:
-                    handler = self.errors.get(type(error)) or self.errors.get(error.code)
-                    result = handler(error) if handler else error
+                    self.logger.debug("HTTP error status=%s type=%s endpoint=%s", error.code,
+                                      type(error).__name__, incoming.endpoint or "<unmatched>")
+                    handler = self.errors.get(type(error))
+                    if not handler and (not api or error.code not in {403, 404}):
+                        handler = self.errors.get(error.code)
+                    if handler:
+                        result = handler(error)
+                    elif error.code and error.code >= 400:
+                        detail = error.description if isinstance(error, CSRFError) else None
+                        result = self.failure(incoming, error.code, api=api, detail=detail)
+                        for key, value in error.get_headers(environ):
+                            if key.lower() not in {"content-type", "content-length"}:
+                                result.headers.add(key, value)
+                    else:
+                        result = error
                 except Exception as error:
-                    self.logger.exception("Service request failed")
+                    self.logger.exception("Service request failed endpoint=%s", incoming.endpoint or "<unmatched>")
                     handler = self.errors.get(500)
-                    result = handler(error) if handler else Response("Internal server error", status=500)
+                    result = handler(error) if handler else self.failure(incoming, 500, api=api)
                 response = as_response(result)
                 for callback in self.after:
                     response = callback(response)
@@ -233,9 +254,15 @@ class WebApplication(Blueprint):
                     response.set_cookie(name, serializer.dumps(incoming.ui), httponly=True, samesite="Lax")
                 if admin:
                     response.headers["Cache-Control"] = "no-store"
-                return response(environ, start_response)
+            return response(environ, start_response)
         finally:
             _request.reset(token)
+
+    @staticmethod
+    def failure(incoming, status, *, api, detail=None):
+        error = error_response(status, workspace_url=incoming.identity.workspace_url,
+                               service=incoming.service, api=api, detail=detail)
+        return Response(error.body, status=status, headers=error.headers)
 
 
 def same_origin(incoming):
@@ -284,6 +311,7 @@ def render_template(name, **values):
     navigation = Markup(admin_navigation(request.identity.admin_tabs, request.service)) if request.admin_mount else ""
     context = {"admin_navigation": navigation, "url_for": url_for, "request": request, "current_user": current_user,
                "get_flashed_messages": get_flashed_messages, "csrf_token": csrf_token,
+               "request_id": request_id.get(),
                "admin_base": f"/admin/{request.service}", "admin_preview": request.admin_mount and shared_admin(),
                "workspace_url": request.identity.workspace_url}
     for callback in current_app.processors:
@@ -354,6 +382,7 @@ def verify_form_token():
         token = request.headers.get("X-CSRFToken") or request.form.get("csrf_token", "")
         expected = request.ui.get("csrf")
         if not expected or not hmac.compare_digest(token, expected):
+            current_app.logger.debug("Rejected invalid CSRF token")
             raise CSRFError()
 
 

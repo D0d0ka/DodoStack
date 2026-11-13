@@ -79,6 +79,13 @@ button.danger { color: #842d24; }
 .entry + .entry { border-top: 1px solid var(--line); }
 .entry-info { overflow-wrap: anywhere; }
 .entry-detail { font-size: .9rem; margin-top: 4px; }
+.error-page { width: min(600px, calc(100% - 32px)); margin-inline: auto; }
+.error-card { padding: clamp(24px, 6vw, 48px); background: #fff; border: 1px solid var(--line); border-radius: 16px; }
+.error-card img { object-fit: contain; }
+.error-card h1 { margin: 14px 0; }
+.error-card h1 span { display: block; font-size: 1rem; letter-spacing: 0; margin-bottom: 8px; }
+.error-home { display: inline-block; margin-top: 18px; font-weight: 650; }
+.error-reference { margin-top: 20px; font-size: .85rem; }
 @media (max-width: 700px) {
   .vault-layout { grid-template-columns: 1fr; }
   #editor { grid-row: 1; }

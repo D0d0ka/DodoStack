@@ -4,7 +4,7 @@ Dodobook – A private social network for friends.
 from dodo.web import (
     WebApplication, UserMixin, render_template, jsonify, request, redirect,
     url_for, flash, send_from_directory, current_user, require_login, shared_admin, abort,
-    shared_signin, shared_signout, Response,
+    shared_signin, shared_signout,
 )
 from dodo.orm import Database, Profiles
 from werkzeug.utils import secure_filename
@@ -257,7 +257,8 @@ profiles = Profiles(db, User, create_profile)
 @app.before_request
 def block_deleted_profile():
     if not request.admin_mount and current_user.is_authenticated and current_user.is_deleted:
-        return Response("Your DodoBook profile has been deleted.", status=403)
+        return app.failure(request, 403, api=request.path.startswith("/api/"),
+                           detail="Your DodoBook profile has been deleted.")
 
 
 app.profile_loader = profiles
@@ -629,7 +630,7 @@ def pagenotfound():
 
 @app.errorhandler(404)
 def not_found_error(error):
-    return redirect(url_for('pagenotfound'))
+    return render_template('notfound.html'), 404
 
 
 # ── API: User ─────────────────────────────────────────────────────────────────

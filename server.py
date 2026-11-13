@@ -8,20 +8,29 @@ import hashlib
 import hmac
 import importlib
 from ipaddress import IPv4Address
+import logging
 import os
 import re
 import secrets
 import sqlite3
 import sys
+from time import perf_counter
 
 from dodo.auth import AccountStore, Identity
 from dodo import pages
+from dodo.diagnostics import configure_logging, request_id
 from dodo.framework import Application, Response, redirect, request_from_handler
 from dodo.web import WebApplication
 from dotenv import load_dotenv
+from werkzeug.exceptions import BadRequest, HTTPException
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
+DEBUG = os.environ.get("DODO_DEBUG", "false").strip().lower() in {"true", "1", "yes", "on"}
+log = logging.getLogger("dodo.server")
+if __name__ == "__main__":
+    configure_logging(DEBUG)
+    log.info("Starting DodoStack debug=%s", DEBUG)
 PORT = int(os.environ.get("DODO_PORT", "8000"))
 PRIVATE = os.environ.get("DODO_PRIVATE", "false").strip().lower() in {"true", "1", "yes", "on"}
 INSTANCE = BASE_DIR / "instance"
@@ -72,8 +81,11 @@ def workspace_static(request):
 sys.path.insert(0, str(BASE_DIR))
 service_apps = {}
 for service_name, module_name in SERVICE_MODULES.items():
+    started = perf_counter()
     module = importlib.import_module(module_name)
     service_apps[service_name] = module.app
+    log.debug("Loaded service=%s module=%s duration_ms=%.2f", service_name, module_name,
+              (perf_counter() - started) * 1000)
 
 
 admin_tabs = {
@@ -115,13 +127,20 @@ def host_routes(config):
             raise ValueError(f"Duplicate or reserved DodoStack workspace hostname: {host}")
         workspace_addresses[host] = (domain, int(port) if separator else PORT)
 
+    # Register each service domain as a workspace with the same browser-facing port.
+    for domain, port in tuple(workspace_addresses.values()):
+        if workspace_addresses.setdefault(domain, (domain, port)) != (domain, port):
+            raise ValueError(f"Conflicting DodoStack workspace settings for service domain: {domain}")
+
     routes = {host: None for host in (*local_hosts, *workspace_addresses)}
     for host, (domain, port) in workspace_addresses.items():
         services = {name: f"{name}.{domain}" for name in SERVICE_MODULES}
         identity = Identity(accounts, services, port, private=PRIVATE, workspace_host=host)
         identity.admin_tabs = admin_tabs
         routes[host] = (identity, None)
-        for name, address in services.items():
+        if host != domain:
+            continue
+        for name, address in identity.services.items():
             if address in routes or not valid_hostname(address):
                 raise ValueError(f"Duplicate or invalid DodoStack service hostname: {address}")
             routes[address] = (identity, name)
@@ -189,28 +208,96 @@ class DodoHandler(BaseHTTPRequestHandler):
     server_version = "DodoStack/1.0"
 
     def dispatch(self):
-        target = urlsplit(self.path)
+        self.run_request(self.route_request)
+
+    def run_request(self, handler):
+        token = request_id.set(secrets.token_hex(8))
+        self.status = None
+        self.headers_sent = False
+        self.workspace_url = HOST_ROUTES["localhost"][0].workspace_url
+        self.service = None
+        self.api = False
+        self.route_name = "http"
+        started = perf_counter()
+        try:
+            handler()
+        except (BrokenPipeError, ConnectionResetError, TimeoutError) as error:
+            log.debug("Client connection interrupted type=%s", type(error).__name__)
+            self.close_connection = True
+        except HTTPException as error:
+            if self.headers_sent:
+                self.close_connection = True
+                log.exception("HTTP error after response started")
+            else:
+                log.debug("HTTP error status=%s type=%s", error.code, type(error).__name__)
+                self.close_connection = True
+                try:
+                    self.send_failure(error.code)
+                except (BrokenPipeError, ConnectionResetError, TimeoutError):
+                    log.debug("Client disconnected before the error response")
+        except Exception:
+            log.exception("Request failed route=%s", self.route_name)
+            self.close_connection = True
+            if not self.headers_sent:
+                try:
+                    self.send_failure(500)
+                except (BrokenPipeError, ConnectionResetError, TimeoutError):
+                    log.debug("Client disconnected before the error response")
+        finally:
+            level = logging.WARNING if self.status and self.status >= 500 else logging.INFO
+            log.log(level, "Response route=%s status=%s duration_ms=%.2f", self.route_name,
+                    self.status, (perf_counter() - started) * 1000)
+            request_id.reset(token)
+
+    def route_request(self):
+        try:
+            target = urlsplit(self.path)
+        except ValueError as error:
+            raise BadRequest() from error
+        if not target.path.startswith("/") and target.path != "*":
+            raise BadRequest()
         host = self.headers.get("Host", "localhost").lower()
         hostname = host.partition(":")[0].rstrip(".")
-        # Redact query strings, which can contain sign-in tickets.
-        self.requestline = f"{self.command} {target.path} {self.request_version}"
+        self.api = (target.path.startswith("/api/") or target.path == "/api"
+                    or "application/json" in self.headers.get("Accept", "").lower()
+                    or self.headers.get("X-Requested-With", "").lower() == "xmlhttprequest")
         route = HOST_ROUTES.get(hostname)
+        log.debug("Request method=%r host=%s client=%s query_present=%s",
+                  self.command, hostname if route else "<unregistered>",
+                  self.client_address[0], bool(target.query))
         if route is None:
-            return self.send_result(Response.text("Unknown DodoStack service", 404))
+            self.route_name = "unknown_host"
+            parent_route = HOST_ROUTES.get(hostname.partition(".")[2])
+            if parent_route:
+                self.workspace_url = parent_route[0].workspace_url
+            return self.send_failure(404, title="Unknown DodoStack service",
+                                     detail="This hostname is not registered as a DodoStack service.")
         identity, service = route
+        self.workspace_url = identity.workspace_url
+        self.service = service
+        self.route_name = service or "workspace"
+        length = self.headers.get("Content-Length", "0").strip()
+        if not re.fullmatch(r"[0-9]{1,20}", length):
+            raise BadRequest()
+        log.debug("Routed request service=%s content_length=%s", self.route_name, length)
         main = service is None
         app = service_apps.get(service)
         parts = target.path.split("/", 3)
         if main and len(parts) >= 3 and parts[1] == "admin" and parts[2] in identity.admin_tabs:
             service = parts[2]
+            self.route_name = f"admin/{service}"
+            self.api = self.api or (len(parts) == 4 and parts[3].startswith("api/"))
             cookies = SimpleCookie(self.headers.get("Cookie", ""))
             session = cookies.get(identity.main_session)
             user = identity.session_user(session.value if session else None, "server")
             if not user:
+                log.debug("Admin gate requires a session")
                 response = redirect("/login")
             elif destination := identity.account_destination(user):
+                log.debug("Admin gate requires account approval")
                 response = redirect(destination)
             elif not user["is_admin"]:
+                log.debug("Admin gate denied a non-admin account")
                 response = Response.text("Administrator access required.", 403)
             elif len(parts) == 3 or not parts[3]:
                 response = redirect(identity.admin_tabs[service][1])
@@ -221,9 +308,10 @@ class DodoHandler(BaseHTTPRequestHandler):
             cookies = SimpleCookie(self.headers.get("Cookie", ""))
             session = cookies.get("dodo_session")
             user = identity.get_service_user(service, session.value if session else None)
+            log.debug("Service gate service=%s authenticated=%s", service, bool(user))
             auth_pages = {"/login", "/signup", "/register", "/forgot-password"}
             if not user and not (self.command in {"GET", "HEAD"} and target.path.rstrip("/") in auth_pages):
-                if self.command not in {"GET", "HEAD"} or target.path.startswith("/api/"):
+                if self.command not in {"GET", "HEAD"} or self.api:
                     return self.send_result(Response.text("Sign in with an approved account.", 401))
                 query = urlencode({"service": service, "path": target.path + ("?" + target.query if target.query else "")})
                 return self.send_result(redirect(f"{identity.workspace_url}/auth/authorize?{query}"))
@@ -231,12 +319,18 @@ class DodoHandler(BaseHTTPRequestHandler):
                 return self.serve_web(app, service, target.path, target, user, identity)
         request = request_from_handler(self)
         if main:
+            known_path = request.path in {"/", "/login", "/signup", "/logout", "/forgot-password",
+                                          "/auth/authorize", "/account/pending", "/account/password",
+                                          "/account/email", "/admin", "/admin/role", "/admin/password",
+                                          "/admin/approve"}
+            endpoint = "static" if request.path.startswith("/static/") else "<unmatched>"
+            log.debug("Workspace endpoint=%s", request.path if known_path else endpoint)
             if request.path.startswith("/static/"):
                 response = workspace_static(request)
             elif request.path in {"/admin", "/admin/role", "/admin/password", "/admin/approve", "/account/password", "/account/email"}:
                 response = control_panel(request, identity)
             else:
-                response = identity.handle_main(request)
+                response = identity.handle_main(request, api=self.api)
         elif service:
             response = identity.handle_service(service, request)
             if response is None:
@@ -265,24 +359,35 @@ class DodoHandler(BaseHTTPRequestHandler):
         def start_response(status, headers):
             self.send_response(int(status.split()[0]))
             for key, value in headers:
-                self.send_header(key, value)
-            self.send_header("X-Content-Type-Options", "nosniff")
+                if key.lower() not in {"x-request-id", "x-content-type-options"}:
+                    self.send_header(key, value)
             self.end_headers()
             return self.wfile.write
 
         chunks = app.serve(environ, start_response, path=unquote_to_bytes(path).decode("utf-8", "replace"),
-                           identity=identity, user=user, service=service, admin=admin)
+                           identity=identity, user=user, service=service, admin=admin, api=self.api)
         try:
             for chunk in chunks:
                 if self.command != "HEAD":
                     self.wfile.write(chunk)
-        except (BrokenPipeError, ConnectionResetError):
-            pass
         finally:
             if hasattr(chunks, "close"):
                 chunks.close()
 
+    def send_failure(self, status, **kwargs):
+        self._headers_buffer = []
+        self.send_result(pages.error_response(status, workspace_url=self.workspace_url,
+                                              service=self.service, api=self.api, **kwargs))
+
     def send_result(self, response, cookies=()):
+        if response.status >= 400 and response.headers.get("Content-Type", "").startswith("text/plain"):
+            detail = response.body.decode("utf-8") if response.status < 500 else None
+            if detail == "Not found":
+                detail = None
+            error = pages.error_response(response.status, detail=detail, workspace_url=self.workspace_url,
+                                         service=self.service, api=self.api)
+            response.headers.update(error.headers)
+            response.body = error.body
         self.send_response(response.status)
         for key, value in response.headers.items():
             if key.lower() == "set-cookie":
@@ -293,13 +398,29 @@ class DodoHandler(BaseHTTPRequestHandler):
         for cookie in cookies:
             self.send_header("Set-Cookie", cookie)
         self.send_header("Content-Length", str(len(response.body)))
-        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(response.body)
 
-    def log_message(self, fmt, *args):
-        print(f"[{self.log_date_time_string()}] {self.address_string()} {fmt % args}")
+    def end_headers(self):
+        self.send_header("X-Request-ID", request_id.get())
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.headers_sent = True
+        super().end_headers()
+
+    def send_error(self, code, message=None, explain=None):
+        self.close_connection = True
+        # A malformed request can fail before a protocol version is recognized.
+        if self.request_version == self.default_request_version:
+            self.request_version = "HTTP/1.0"
+        self.run_request(lambda: self.send_failure(code))
+
+    def log_request(self, code="-", size="-"):
+        self.status = int(code)
+
+    def log_error(self, fmt, *args):
+        # The base handler includes raw protocol input in some messages.
+        log.debug("HTTP connection error client=%s", self.client_address[0])
 
 
 def main():

@@ -7,7 +7,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dodo.web import WebApplication, flash, jsonify, redirect, render_template, request, url_for, verify_form_token
+from dodo.web import WebApplication, jsonify, render_template, request, verify_form_token
 from dodo.web import CSRFError
 from dodo.orm import Profiles
 from sqlalchemy import event
@@ -204,11 +204,7 @@ def create_app(config_object=Config) -> WebApplication:
         )
         if wants_json:
             return jsonify({"ok": False, "error": "The upload is too large."}), 413
-        flash(
-            f"That upload is larger than the {app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)} MB limit.",
-            "error",
-        )
-        return redirect(request.referrer or url_for("admin.dashboard")), 413
+        return render_template("errors/413.html"), 413
 
     @app.errorhandler(CSRFError)
     def csrf_error(error):
@@ -218,13 +214,11 @@ def create_app(config_object=Config) -> WebApplication:
             or request.headers.get("X-Requested-With") == "XMLHttpRequest"
         ):
             return jsonify({"ok": False, "error": "Invalid or expired security token."}), 400
-        flash("Your security token expired. Please try again.", "error")
-        return redirect(request.referrer or url_for("main.index"))
+        return app.failure(request, 400, api=False, detail=error.description)
 
     @app.errorhandler(500)
     def server_error(error):
         db.session.rollback()
-        log.exception("Unhandled server error")
         if (
             request.path.startswith("/api/")
             or request.headers.get("X-Requested-With") == "XMLHttpRequest"

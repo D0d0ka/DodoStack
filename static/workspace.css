@@ -87,6 +87,13 @@ p { color: var(--muted); line-height: 1.55; }
 .auth-card form button { margin-top: 12px; }
 .auth-card .auth-switch { margin-top: 20px; font-size: .9rem; }
 .error { padding: 10px 12px; border-radius: 8px; background: #fcece6; color: #842e1c; }
+.error-page { width: min(680px, calc(100% - 32px)); margin: clamp(24px, 10vh, 100px) auto; }
+.error-card { padding: clamp(24px, 6vw, 56px); background: var(--white); border: 1px solid var(--line); border-radius: 24px; }
+.error-card img { object-fit: contain; }
+.error-card h1 { font-size: clamp(2rem, 6vw, 4rem); margin: 16px 0; overflow-wrap: anywhere; }
+.error-card h1 span { display: block; color: var(--green); font-size: 1rem; letter-spacing: .02em; margin-bottom: 12px; }
+.error-home { display: inline-block; margin-top: 22px; font-weight: 650; text-underline-offset: .2em; }
+.error-reference { margin-top: 24px; font-size: .85rem; }
 @media (max-width: 640px) {
   .header-inner, .workspace, .auth-layout { width: calc(100% - 28px); }
   .header-inner { min-height: 64px; flex-wrap: wrap; padding-block: 8px; }

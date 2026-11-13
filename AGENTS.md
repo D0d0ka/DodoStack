@@ -9,5 +9,6 @@
 - Use .venv as python environment.
 - Always when you learn something new about this project that would help in developing it later write it into this file.
 - Use a referrer policy such as `strict-origin` for native POST forms. With `no-referrer`, browsers send `Origin: null` and the shared origin check rejects the form.
-- Dodo Calender custom-day forms use day.month or day.month.year. The database stores month-day or ISO dates for calendar matching and sorting.
 - An HTTP reverse proxy should preserve the browser's Host header. Register each proxy workspace as `host:port` in `DODO_WORKSPACE_HOSTS` when the browser port differs from `DODO_PORT`. Workspace and service redirects use the configured browser port.
+- In `DODO_WORKSPACE_HOSTS`, `host[:port]=service-domain` also registers the bare service domain as a workspace on that browser-facing port. Services on that domain use its workspace for sign-in. Entries sharing a service domain must agree on the port.
+- `DODO_DEBUG` enables detailed server diagnostics. Use `X-Request-ID` to match a response to its stderr logs. Keep request payloads, query values, credentials, and exception messages out of diagnostics. Route browser error responses through `dodo/pages.py` or the service's error handlers and preserve API response formats and HTTP error headers.
