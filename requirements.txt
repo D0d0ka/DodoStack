@@ -9,3 +9,4 @@ python-dotenv>=1,<2
 Pillow>=11,<13
 email-validator>=2,<3
 yt-dlp>=2026.10.26
+holidays>=0.108,<1

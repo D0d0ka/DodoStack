@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Calendar settings · Dodo Calender{% endblock %}
+{% block scripts %}<script defer src="{{ url_for('static', filename='holiday-search.js') }}"></script>{% endblock %}
+{% macro day_form(day) %}
+<form class="form custom-form" method="post" action="{{ url_for('admin_custom_days') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if day.id %}<input type="hidden" name="id" value="{{ day.id }}">{% endif %}
+  <label>Name<input name="title" value="{{ day.title or '' }}" maxlength="120" required></label>
+  <label>Date<input name="day" value="{{ day.day or '' }}" maxlength="11" required aria-describedby="date-format"></label>
+  <label>Frequency
+    <select name="yearly">
+      <option value="1"{% if day.yearly in (1, '1') or day.yearly is undefined %} selected{% endif %}>Every year</option>
+      <option value="0"{% if day.yearly in (0, '0') %} selected{% endif %}>Once</option>
+    </select>
+  </label>
+  <div class="actions">
+    <button class="primary" name="action" value="save">{{ 'Save' if day.id else 'Add day' }}</button>
+    {% if day.id %}<button class="danger" name="action" value="delete" formnovalidate>Delete</button>{% endif %}
+  </div>
+</form>
+{% endmacro %}
+{% block content %}
+<h1>Calendar settings</h1>
+<div class="settings">
+  <section class="panel">
+    <h2>Public holidays</h2>
+    <p class="muted">Choose which country calendars appear for everyone.</p>
+    <form class="form" method="post" action="{{ url_for('admin_settings') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label id="country-search-label" hidden>Search countries and territories
+        <input id="country-search" type="search" placeholder="Name or country code" aria-controls="country-list">
+      </label>
+      <div class="country-list" id="country-list">
+        {% for code, country in countries.items() %}
+          <label class="country" data-code="{{ code }}">
+            <input type="checkbox" name="countries" value="{{ code }}"{% if code in enabled %} checked{% endif %}>
+            <span>{{ country }} <small>{{ code }}</small></span>
+          </label>
+        {% endfor %}
+      </div>
+      <p class="muted" id="country-results" role="status" hidden></p>
+      <button class="primary">Save countries</button>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>Custom days</h2>
+    <p class="muted" id="date-format">Enter day.month for yearly days (14.11) or day.month.year for one-time days (14.11.2026).</p>
+    {% if error %}<p class="notice" role="alert">{{ error }}</p>{% endif %}
+    {% for day in custom_days %}
+      {{ day_form(form if form.id == day.id|string else day) }}
+    {% endfor %}
+    {{ day_form(form if not form.id else {}) }}
+  </section>
+</div>
+{% endblock %}

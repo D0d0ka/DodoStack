@@ -45,6 +45,7 @@ SERVICE_MODULES = {
     "dodobook": "subsites.dodobook.server",
     "dodotv": "subsites.DodoTV.run",
     "dodokey": "subsites.dodokey.app",
+    "dodocalender": "subsites.dodocalender.app",
 }
 workspace = Application("workspace", static_dir=BASE_DIR / "static")
 
@@ -56,6 +57,7 @@ BRAND_FILES = {
     "dodobook": BASE_DIR / "subsites/dodobook/static/dodobook.png",
     "dodotv": BASE_DIR / "subsites/DodoTV/dodotv.png",
     "dodokey": BASE_DIR / "subsites/dodokey/static/dodokey.png",
+    "dodocalender": BASE_DIR / "subsites/dodocalender/static/dodocalender.png",
 }
 
 

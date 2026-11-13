@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit event' if event_id else 'New event' }} · Dodo Calender{% endblock %}
+{% block width %}narrow{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('event_details', event_id=event_id) if event_id else url_for('calendar_view', day=event.event_date) }}">← {{ 'Back to event' if event_id else 'Back to calendar' }}</a>
+<h1>{{ 'Edit event' if event_id else 'New event' }}</h1>
+<form class="panel form" method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if error %}<p class="notice" role="alert">{{ error }}</p>{% endif %}
+  <label>Event name<input name="title" value="{{ event.title or '' }}" maxlength="120" required autofocus></label>
+  <div class="form-row">
+    <label>Start date<input type="date" name="event_date" value="{{ event.event_date }}" required></label>
+    <label>Time (optional)<input type="time" name="event_time" value="{{ event.event_time or '' }}"></label>
+  </div>
+  <label>Notes (optional)<textarea name="notes" rows="3" maxlength="2000">{{ event.notes or '' }}</textarea></label>
+  <div class="form-row">
+    <label>Repeat
+      <select name="repeat">
+        {% for code, label in repeats.items() %}<option value="{{ code }}"{% if event.repeat == code %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Repeat interval<input type="number" min="1" max="999" name="step" value="{{ event.step or 1 }}" required aria-describedby="interval-note"></label>
+  </div>
+  <p class="muted" id="interval-note">For example, choose Monthly with an interval of 2 to repeat every two months. Dates absent from a month or year are skipped.</p>
+  <label>Repeat until (optional)<input type="date" name="until_date" value="{{ event.until_date or '' }}"></label>
+  <button class="primary">{{ 'Save changes' if event_id else 'Create event' }}</button>
+</form>
+{% endblock %}

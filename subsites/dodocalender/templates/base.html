@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Dodo Calender{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='dodocalender.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='calendar.css') }}">
+  {% block scripts %}{% endblock %}
+</head>
+<body>
+{% if admin_preview %}{{ admin_navigation }}{% endif %}
+<header class="header">
+  <div class="frame header-inner">
+    <a class="brand" href="{{ url_for('calendar_view') }}">
+      <img src="{{ url_for('static', filename='dodocalender.png') }}" alt="" width="44" height="44">
+      <span>Dodo Calender</span>
+    </a>
+    <nav aria-label="Workspace">
+      {% if current_user.is_admin and not admin_preview %}<a href="{{ url_for('admin_settings') }}">Settings</a>{% endif %}
+      <a href="{{ workspace_url }}/">DodoStack</a>
+    </nav>
+  </div>
+</header>
+<main class="frame {% block width %}{% endblock %}">
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

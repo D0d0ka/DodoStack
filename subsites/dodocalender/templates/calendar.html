@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-title">
+  <h1>{{ month_name }} <span>{{ selection.year }}</span></h1>
+  <div class="calendar-actions">
+    <nav class="month-navigation" aria-label="Month navigation">
+      {% if previous %}<a class="button month-arrow" href="{{ url_for('calendar_view', day=previous) }}" aria-label="Previous month">←</a>
+      {% else %}<button class="month-arrow" type="button" aria-label="Previous month" disabled>←</button>{% endif %}
+      <a class="button" href="{{ url_for('calendar_view') }}">Today</a>
+      {% if following %}<a class="button month-arrow" href="{{ url_for('calendar_view', day=following) }}" aria-label="Next month">→</a>
+      {% else %}<button class="month-arrow" type="button" aria-label="Next month" disabled>→</button>{% endif %}
+    </nav>
+    <a class="button primary" href="{{ url_for('event_form', day=selection) }}">+ New event</a>
+  </div>
+</div>
+<form class="jump actions" action="{{ url_for('jump') }}">
+  <label for="month">Go to month</label>
+  <input id="month" name="month" type="month" value="{{ selection.isoformat()[:7] }}" required>
+  <button>Go</button>
+</form>
+<div class="calendar-layout">
+  <div class="calendar-scroll">
+    <table class="month" aria-label="{{ month_name }} {{ selection.year }}">
+      <thead><tr>{% for weekday in ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun') %}<th scope="col">{{ weekday }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for week in weeks %}
+        <tr>
+          {% for day in week %}
+            {% if day %}
+              {% set items = entries.get(day, []) %}
+              <td class="{% if day == selection %}selected{% endif %}">
+                <a class="day" href="{{ url_for('calendar_view', day=day, _anchor='agenda') }}"
+                   aria-label="{{ day }}{% if items %}, {{ items|length }} entries{% endif %}"
+                   {% if day == current %}aria-current="date"{% endif %}>{{ day.day }}</a>
+                {% for item in items[:2] %}
+                  {% if item.id %}
+                    <a class="chip {{ item.kind }}" href="{{ url_for('event_details', event_id=item.id, day=day) }}" title="{{ item.title }}">{{ item.title }}</a>
+                  {% else %}
+                    <span class="chip {{ item.kind }}" title="{{ item.title }}{% if item.country %} · {{ item.country }}{% endif %}">{{ item.title }}</span>
+                  {% endif %}
+                {% endfor %}
+                {% if items|length > 2 %}
+                  <a class="more" href="{{ url_for('calendar_view', day=day, _anchor='agenda') }}">+{{ items|length - 2 }} more</a>
+                {% endif %}
+              </td>
+            {% else %}<td class="empty"></td>{% endif %}
+          {% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <section id="agenda" class="panel" aria-labelledby="agenda-heading">
+    <h2 id="agenda-heading">{{ day_month }} {{ selection.day }}</h2>
+    {% for item in entries.get(selection, []) %}
+      <div class="agenda-item {{ item.kind }}">
+        {% if item.id %}<a href="{{ url_for('event_details', event_id=item.id, day=selection) }}">{{ item.title }}</a>{% else %}<strong>{{ item.title }}</strong>{% endif %}
+        <span>{% if item.country %}{{ item.country }}{% elif item.kind == 'custom' %}Custom day{% else %}{{ item.time or 'All day' }}{% if item.kind == 'shared' %} · Shared{% endif %}{% endif %}</span>
+      </div>
+    {% else %}
+      <p class="muted">No events for this day.</p>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

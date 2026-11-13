@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Shared event · Dodo Calender{% endblock %}
+{% block width %}narrow{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('calendar_view') }}">← Back to calendar</a>
+<h1>{{ event.title }}</h1>
+<section class="panel" aria-label="Shared event details">
+  {% include "_event_summary.html" %}
+  {% if added %}
+    <a class="button primary" href="{{ url_for('event_details', event_id=event.id) }}">Open in my calendar</a>
+  {% else %}
+    <p class="muted">The owner can see that you added the event. Their changes will appear in your calendar.</p>
+    <form method="post" action="{{ url_for('shared_event', token=token) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="primary">Add to my calendar</button>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}

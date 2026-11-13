@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ event.title }} · Dodo Calender{% endblock %}
+{% block width %}narrow{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('calendar_view', day=selected) }}">← Back to calendar</a>
+<h1>{{ event.title }}</h1>
+<section class="panel" aria-label="Event details">
+  {% include "_event_summary.html" %}
+  {% if owned %}<a class="button" href="{{ url_for('event_form', event_id=event.id) }}">Edit event</a>{% endif %}
+</section>
+{% if owned %}
+  <section class="panel spaced" aria-labelledby="sharing">
+    <h2 id="sharing">Sharing</h2>
+    {% if share_url %}
+      <label>Share link<input type="url" value="{{ share_url }}" readonly></label>
+      <p class="muted">Anyone with this link and a DodoStack account can add the event to their calendar. Disabling the link stops new additions.</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('manage_event', event_id=event.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if share_url %}<button name="action" value="disable_link">Disable link</button>
+      {% else %}<button class="primary" name="action" value="share">Create share link</button>{% endif %}
+    </form>
+    <h3>Shared with</h3>
+    {% if people %}
+      <ul class="people">{% for person in people %}<li>{{ person }}</li>{% endfor %}</ul>
+    {% else %}
+      <p class="muted">Nobody has added this event yet.</p>
+    {% endif %}
+  </section>
+{% endif %}
+<form class="spaced" method="post" action="{{ url_for('manage_event', event_id=event.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if owned %}
+    <details><summary>Delete event</summary>
+      <p>This removes the event from every calendar that has added it.</p>
+      <button class="danger" name="action" value="delete">Delete event</button>
+    </details>
+  {% else %}
+    <button name="action" value="leave">Remove from my calendar</button>
+  {% endif %}
+</form>
+{% endblock %}

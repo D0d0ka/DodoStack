@@ -9,10 +9,11 @@ SERVICE_DESCRIPTIONS = {
     "dodobook": "Share posts and chat with friends and groups.",
     "dodotv": "Browse the catalog and keep track of what you watch.",
     "dodokey": "Store and manage your passwords in an encrypted vault.",
+    "dodocalender": "Plan personal events, see public holidays, and share events.",
 }
 SERVICE_NAMES = {
     "doodle": "Doodle", "dodobook": "DodoBook", "dodotv": "Dodo TV",
-    "todo": "Todo", "dodokey": "DodoKey",
+    "todo": "Todo", "dodokey": "DodoKey", "dodocalender": "Dodo Calender",
 }
 
 

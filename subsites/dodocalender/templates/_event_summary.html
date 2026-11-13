@@ -1,0 +1,10 @@
+<dl class="details">
+  <div><dt>Starts</dt><dd><time datetime="{{ event.event_date }}">{{ event.event_date }}</time>{% if event.event_time %} at {{ event.event_time }}{% else %} · All day{% endif %}</dd></div>
+  <div><dt>Repeat</dt><dd>
+    {% if event.repeat == 'none' or event.step == 1 %}{{ repeats[event.repeat] }}
+    {% else %}Every {{ event.step }} {{ {'daily': 'days', 'weekly': 'weeks', 'monthly': 'months', 'yearly': 'years'}[event.repeat] }}{% endif %}
+    {% if event.until_date %} · through {{ event.until_date }}{% endif %}
+  </dd></div>
+  {% if owner and event.owner_id != current_user.id %}<div><dt>Shared by</dt><dd>{{ owner.username }}</dd></div>{% endif %}
+</dl>
+{% if event.notes %}<p class="notes">{{ event.notes }}</p>{% endif %}

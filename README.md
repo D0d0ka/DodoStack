@@ -21,6 +21,7 @@ python server.py
 | DodoBook | [dodobook.localhost:8000](http://dodobook.localhost:8000) |
 | Dodo TV | [dodotv.localhost:8000](http://dodotv.localhost:8000) |
 | DodoKey | [dodokey.localhost:8000](http://dodokey.localhost:8000) |
+| Dodo Calender | [dodocalender.localhost:8000](http://dodocalender.localhost:8000) |
 | Administration | [localhost:8000/admin](http://localhost:8000/admin) |
 
 Dodo TV uses FFmpeg and FFprobe for video uploads, validation, and preview frames. Doodle's optional AI answers require a local Ollama instance. Set `DODO_PORT` to change the port.
@@ -44,13 +45,13 @@ DODO_WORKSPACE_HOSTS=dodoai,192.168.0.11=dodostack.home.arpa
 
 Restart with `.venv/bin/python server.py`. In this example, you can open the workspace at `http://dodoai:8000` or `http://192.168.0.11:8000`. Each workspace address links to its own set of service hostnames. A DNS workspace name doubles as the service domain by default. For a workspace opened by IPv4 address, specify a separate service domain after `=`.
 
-Configure DNS or the client device's hosts file so that `todo`, `doodle`, `dodobook`, `dodotv`, and `dodokey` under each service domain resolve to the server. For example, on the LAN you can add this hosts-file entry:
+Configure DNS or the client device's hosts file so that `todo`, `doodle`, `dodobook`, `dodotv`, `dodokey`, and `dodocalender` under each service domain resolve to the server. For example, on the LAN you can add this hosts-file entry:
 
 ```text
-192.168.0.11 todo.dodostack.home.arpa doodle.dodostack.home.arpa dodobook.dodostack.home.arpa dodotv.dodostack.home.arpa dodokey.dodostack.home.arpa
+192.168.0.11 todo.dodostack.home.arpa doodle.dodostack.home.arpa dodobook.dodostack.home.arpa dodotv.dodostack.home.arpa dodokey.dodostack.home.arpa dodocalender.dodostack.home.arpa
 ```
 
-For `dodoai`, point those five names under `dodoai` to the Pi's Tailscale IP. The workspace name resolving on Tailscale does not itself create DNS records for its service names. DodoKey's browser encryption requires a secure context such as localhost or HTTPS.
+For `dodoai`, point those service names under `dodoai` to the Pi's Tailscale IP. The workspace name resolving on Tailscale does not itself create DNS records for its service names. DodoKey's browser encryption requires a secure context such as localhost or HTTPS.
 
 ## DodoKey password vault
 
@@ -78,6 +79,7 @@ DodoStack creates databases from the current schema. The shared account, DodoBoo
 | DodoBook | `subsites/dodobook/instance/dodobook.db` |
 | Dodo TV | `subsites/DodoTV/instance/dodotv.db` |
 | DodoKey | `subsites/dodokey/instance/vaults.sqlite3` |
+| Dodo Calender | `subsites/dodocalender/instance/calendar.sqlite3` |
 
 ## Add a service and admin tab
 
