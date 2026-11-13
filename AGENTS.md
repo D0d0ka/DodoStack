@@ -15,3 +15,4 @@
 - `DODO_HTTPS=true` enables direct TLS with `DODO_TLS_CERT_FILE` and `DODO_TLS_KEY_FILE`. It also selects HTTPS URLs, origin checks, and `__Host-` secure cookies. Restart after certificate renewal. The bundled listener uses Python's `ThreadingHTTPServer`, which Python advises against exposing in production.
 - Shared sign-in tickets are tied to a service host and browser cookie, expire after two minutes, and are redeemed once in the shared account database. Keep `/_auth/callback` query strings out of proxy access logs. Workspace and service mutations require a form CSRF token or `X-CSRFToken`, depending on the framework.
 - Doodle connects to the public IP address it verified for each crawl request and redirect. HTTPS certificate verification and the Host header still use the original hostname.
+- The workspace shows service names and descriptions to signed-out visitors in both public and private mode. Only signed-in visitors get clickable service cards.

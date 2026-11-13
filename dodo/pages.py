@@ -110,8 +110,6 @@ def error_response(status, *, title=None, detail=None, workspace_url="", service
 
 
 def dashboard(user, services, *, private=False, token=""):
-    if private and not user:
-        services = {}
     if user:
         account = f"""<div class="account">
   <a class="username" href="/account/email">{safe(user["username"])}</a>
@@ -127,22 +125,29 @@ def dashboard(user, services, *, private=False, token=""):
     cards = []
     for service, url in services.items():
         name = safe(service_name(service))
-        cards.append(f"""
-<a class="service-card" href="{safe(url)}">
+        content = f"""
   {brand_logo(service)}
-  <div><h3>{name}</h3><p>{safe(SERVICE_DESCRIPTIONS.get(service, 'Open this service with your Dodo account.'))}</p></div>
+  <div><h3>{name}</h3><p>{safe(SERVICE_DESCRIPTIONS.get(service, 'Open this service with your Dodo account.'))}</p></div>"""
+        if user:
+            cards.append(f"""<a class="service-card" href="{safe(url)}">{content}
   <span class="arrow" aria-hidden="true">→</span>
 </a>""")
+        else:
+            cards.append(f'<div class="service-card">{content}</div>')
 
     service_list = ""
     if cards:
         service_list = f"""
 <section class="services" aria-labelledby="services-heading">
-  <h2 id="services-heading">Your services</h2>
+  <h2 id="services-heading">{'Your services' if user else 'Services'}</h2>
   <div class="service-grid">{''.join(cards)}</div>
 </section>"""
-    intro = ("Sign in with an approved account to open the services."
-             if private and not user else "One account for all your Dodo services.")
+    if user:
+        intro = "One account for all your Dodo services."
+    elif private:
+        intro = "Sign in with an approved account to open the services."
+    else:
+        intro = "Sign in to open the services."
     return document("Workspace", f"""
 {header(account)}
 <main class="workspace">
