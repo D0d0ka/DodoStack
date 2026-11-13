@@ -91,14 +91,19 @@ def valid_hostname(host):
 
 def host_routes(config):
     local_hosts = ("localhost", "127.0.0.1", "0.0.0.0")
-    workspace_domains = {"localhost": "localhost"}
+    workspace_addresses = {"localhost": ("localhost", PORT)}
     for entry in config.lower().split(","):
         if not entry.strip():
             continue
-        host, _, domain = (part.strip().rstrip(".") for part in entry.partition("="))
+        address, _, domain = (part.strip() for part in entry.partition("="))
+        host, separator, port = address.partition(":")
+        host = host.rstrip(".")
+        domain = domain.rstrip(".")
         domain = domain or host
+        if separator and (not re.fullmatch(r"[0-9]{1,5}", port) or not 1 <= int(port) <= 65535):
+            raise ValueError(f"Invalid HTTP port in DODO_WORKSPACE_HOSTS: {address}")
         if not valid_hostname(host) or not valid_hostname(domain):
-            raise ValueError("DODO_WORKSPACE_HOSTS expects hostnames or IPv4 addresses with a service domain")
+            raise ValueError("DODO_WORKSPACE_HOSTS expects host[:port][=service-domain]")
         try:
             IPv4Address(host)
         except ValueError:
@@ -106,14 +111,14 @@ def host_routes(config):
                 raise ValueError(f"Invalid DODO_WORKSPACE_HOSTS address: {host}")
         if domain.split(".")[-1].isdigit():
             raise ValueError(f"Set a DNS service domain for {host} using {host}=example.home.arpa")
-        if host in local_hosts or host in workspace_domains:
+        if host in local_hosts or host in workspace_addresses:
             raise ValueError(f"Duplicate or reserved DodoStack workspace hostname: {host}")
-        workspace_domains[host] = domain
+        workspace_addresses[host] = (domain, int(port) if separator else PORT)
 
-    routes = {host: None for host in (*local_hosts, *workspace_domains)}
-    for host, domain in workspace_domains.items():
+    routes = {host: None for host in (*local_hosts, *workspace_addresses)}
+    for host, (domain, port) in workspace_addresses.items():
         services = {name: f"{name}.{domain}" for name in SERVICE_MODULES}
-        identity = Identity(accounts, services, PORT, private=PRIVATE, workspace_host=host)
+        identity = Identity(accounts, services, port, private=PRIVATE, workspace_host=host)
         identity.admin_tabs = admin_tabs
         routes[host] = (identity, None)
         for name, address in services.items():

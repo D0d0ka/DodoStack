@@ -216,7 +216,8 @@ class Identity:
     def __init__(self, accounts: AccountStore, services: dict[str, str], port: int, *, private=False, workspace_host="localhost"):
         self.accounts, self.services, self.port = accounts, services, port
         self.workspace_host = workspace_host
-        self.workspace_url = f"http://{workspace_host}:{port}"
+        self.port_suffix = "" if port == 80 else f":{port}"
+        self.workspace_url = f"http://{workspace_host}{self.port_suffix}"
         self.private = private
         self.main_session = "dodo_main_session"
 
@@ -261,7 +262,7 @@ class Identity:
 
     def service_url(self, service: str, path: str = "/"):
         host = self.services[service]
-        return f"http://{host}:{self.port}{path}"
+        return f"http://{host}{self.port_suffix}{path}"
 
     def authorize_redirect(self, service: str, request: Request):
         path = request.path
