@@ -1,0 +1,9 @@
+<script>
+    function bookFetch(url, options = {}) {
+        const method = (options.method || 'GET').toUpperCase();
+        if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return fetch(url, options);
+        const headers = new Headers(options.headers);
+        headers.set('X-CSRFToken', {{ csrf_token() | tojson }});
+        return fetch(url, {...options, headers});
+    }
+</script>

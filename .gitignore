@@ -6,5 +6,6 @@ instance/
 .db*
 .key*
 .env
+*.pem
 
 .DS_Store

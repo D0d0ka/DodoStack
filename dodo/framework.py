@@ -10,16 +10,19 @@ from dataclasses import dataclass, field
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 from urllib.parse import parse_qs, urlencode, urlsplit
 import html
 import logging
 import re
 
-from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 
 
 log = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from .auth import Identity
 
 
 @dataclass
@@ -34,6 +37,9 @@ class Request:
     flash: str | None = None
     response_cookies: list[str] = field(default_factory=list)
     workspace_url: str = ""
+    secure: bool = False
+    csrf: str = ""
+    identity: Identity | None = None
 
     def value(self, name: str, default: str = "") -> str:
         return self.form.get(name, self.query.get(name, [default]))[0]
@@ -42,10 +48,25 @@ class Request:
         cookie = f"{name}={value}; Path=/; Max-Age={max_age}; SameSite=Lax"
         if httponly:
             cookie += "; HttpOnly"
+        if self.secure:
+            cookie += "; Secure"
         self.response_cookies.append(cookie)
 
     def delete_cookie(self, name: str) -> None:
-        self.response_cookies.append(f"{name}=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly")
+        self.set_cookie(name, "", max_age=0)
+
+
+def cookie_name(name: str, secure: bool) -> str:
+    return "__Host-" + name if secure else name
+
+
+def same_origin(method, headers, origin):
+    if method in {"GET", "HEAD", "OPTIONS"}:
+        return True
+    if headers.get("Sec-Fetch-Site") in {"cross-site", "same-site"}:
+        return False
+    source = headers.get("Origin")
+    return source == origin if source is not None else True
 
 
 @dataclass
@@ -105,8 +126,12 @@ class Application:
 
     def dispatch(self, request: Request, *, auth=None) -> Response:
         if auth:
+            request.identity = auth
             request.workspace_url = auth.workspace_url
-            request.user = auth.get_service_user(self.name, request.cookies.get("dodo_session"))
+            session = request.cookies.get(auth.service_session)
+            request.user = auth.get_service_user(self.name, session)
+            if request.user:
+                request.csrf = auth.csrf_token(session, self.name)
         if request.path.startswith("/static/"):
             if request.method not in {"GET", "HEAD"}:
                 response = Response.text("This address accepts GET and HEAD.", 405)
@@ -123,6 +148,9 @@ class Application:
                 log.debug("Matched endpoint=%s service=%s", handler.__name__, self.name)
                 if getattr(handler, "requires_user", False) and request.user is None:
                     return auth.authorize_redirect(self.name, request)
+                if auth and request.method not in {"GET", "HEAD", "OPTIONS"}:
+                    if not request.csrf or not auth.valid_form(request, request.csrf):
+                        return Response.text("Invalid security token.", 403)
                 response = handler(request, **{key: int(value) for key, value in match.groupdict().items()})
                 if isinstance(response, str):
                     response = Response.html(response)
@@ -142,6 +170,8 @@ def request_from_handler(handler: BaseHTTPRequestHandler) -> Request:
     if length > 1_000_000:
         raise RequestEntityTooLarge()
     payload = handler.rfile.read(length) if length else b""
+    if len(payload) != length:
+        raise BadRequest()
     form = parse_qs(payload.decode("utf-8", "replace")) if handler.command == "POST" else {}
     cookie = SimpleCookie()
     try:

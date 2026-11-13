@@ -1,11 +1,9 @@
 """DodoStack main server: shared identity plus host-routed child services."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote_to_bytes, urlencode, urlsplit
+from urllib.parse import unquote_to_bytes, urlsplit
 from http.cookies import SimpleCookie
 import argparse
-import hashlib
-import hmac
 import importlib
 from ipaddress import IPv4Address
 import logging
@@ -13,13 +11,15 @@ import os
 import re
 import secrets
 import sqlite3
+import ssl
 import sys
+from threading import BoundedSemaphore
 from time import perf_counter
 
-from dodo.auth import AccountStore, Identity
+from dodo.auth import AccountStore, AuthRateLimit, Identity
 from dodo import pages
 from dodo.diagnostics import configure_logging, request_id
-from dodo.framework import Application, Response, redirect, request_from_handler
+from dodo.framework import Application, Response, redirect, request_from_handler, same_origin
 from dodo.web import WebApplication
 from dotenv import load_dotenv
 from werkzeug.exceptions import BadRequest, HTTPException
@@ -32,6 +32,10 @@ if __name__ == "__main__":
     configure_logging(DEBUG)
     log.info("Starting DodoStack debug=%s", DEBUG)
 PORT = int(os.environ.get("DODO_PORT", "8000"))
+HTTPS = os.environ.get("DODO_HTTPS", "false").strip().lower()
+if HTTPS not in {"true", "false", "1", "0", "yes", "no", "on", "off"}:
+    raise SystemExit("DODO_HTTPS expects true or false.")
+HTTPS = HTTPS in {"true", "1", "yes", "on"}
 PRIVATE = os.environ.get("DODO_PRIVATE", "false").strip().lower() in {"true", "1", "yes", "on"}
 INSTANCE = BASE_DIR / "instance"
 INSTANCE.mkdir(exist_ok=True)
@@ -48,6 +52,7 @@ accounts = AccountStore(
     INSTANCE / "accounts.sqlite3", secret,
     min_password_length=int(os.environ.get("DODO_MIN_PASSWORD_LENGTH", "8")),
 )
+auth_rate_limit = AuthRateLimit()
 SERVICE_MODULES = {
     "todo": "subsites.todo.app",
     "doodle": "subsites.doodle.app",
@@ -135,7 +140,7 @@ def host_routes(config):
     routes = {host: None for host in (*local_hosts, *workspace_addresses)}
     for host, (domain, port) in workspace_addresses.items():
         services = {name: f"{name}.{domain}" for name in SERVICE_MODULES}
-        identity = Identity(accounts, services, port, private=PRIVATE, workspace_host=host)
+        identity = Identity(accounts, services, port, private=PRIVATE, workspace_host=host, secure=HTTPS)
         identity.admin_tabs = admin_tabs
         routes[host] = (identity, None)
         if host != domain:
@@ -163,10 +168,10 @@ def control_panel(request, identity):
         return redirect(destination)
     if admin and not user["is_admin"]:
         return Response.text("Administrator access required.", 403)
-    token = hmac.new(accounts.secret, request.cookies[identity.main_session].encode(), hashlib.sha256).hexdigest()
+    token = identity.form_token(request)
     message = ""
     if request.method == "POST":
-        if not hmac.compare_digest(token, request.value("csrf")):
+        if not identity.valid_form(request, token):
             return Response.text("Invalid security token.", 403)
         try:
             if path == "/account/email":
@@ -205,7 +210,8 @@ def control_panel(request, identity):
 
 
 class DodoHandler(BaseHTTPRequestHandler):
-    server_version = "DodoStack/1.0"
+    server_version = "DodoStack"
+    sys_version = ""
 
     def dispatch(self):
         self.run_request(self.route_request)
@@ -277,10 +283,28 @@ class DodoHandler(BaseHTTPRequestHandler):
         self.service = service
         self.route_name = service or "workspace"
         length = self.headers.get("Content-Length", "0").strip()
-        if not re.fullmatch(r"[0-9]{1,20}", length):
+        if (self.headers.get("Transfer-Encoding") is not None
+                or len(self.headers.get_all("Content-Length", [])) > 1
+                or len(self.headers.get_all("Host", [])) > 1
+                or not re.fullmatch(r"[0-9]{1,20}", length)):
             raise BadRequest()
+        if not re.fullmatch(r"[a-z0-9.-]+(?::[0-9]{1,5})?", host):
+            raise BadRequest()
+        host_port = host.partition(":")[2]
+        default_port = "443" if identity.secure else "80"
+        origin_host = hostname if not host_port or host_port == default_port else f"{hostname}:{host_port}"
+        if not same_origin(self.command, self.headers, f"{identity.scheme}://{origin_host}"):
+            return self.send_failure(403)
         log.debug("Routed request service=%s content_length=%s", self.route_name, length)
         main = service is None
+        if main and self.command == "POST" and target.path in {"/login", "/signup", "/forgot-password", "/account/password"}:
+            delay = auth_rate_limit.retry_after(self.client_address[0])
+            if delay:
+                log.warning("Authentication rate limit reached")
+                response = pages.error_response(429, detail="Wait a minute and try again.",
+                                                workspace_url=self.workspace_url, api=self.api)
+                response.headers["Retry-After"] = str(delay)
+                return self.send_result(response)
         app = service_apps.get(service)
         parts = target.path.split("/", 3)
         if main and len(parts) >= 3 and parts[1] == "admin" and parts[2] in identity.admin_tabs:
@@ -306,18 +330,21 @@ class DodoHandler(BaseHTTPRequestHandler):
             return self.send_result(response)
         if service and not target.path.startswith("/_auth/"):
             cookies = SimpleCookie(self.headers.get("Cookie", ""))
-            session = cookies.get("dodo_session")
+            session = cookies.get(identity.service_session)
             user = identity.get_service_user(service, session.value if session else None)
             log.debug("Service gate service=%s authenticated=%s", service, bool(user))
             auth_pages = {"/login", "/signup", "/register", "/forgot-password"}
             if not user and not (self.command in {"GET", "HEAD"} and target.path.rstrip("/") in auth_pages):
                 if self.command not in {"GET", "HEAD"} or self.api:
                     return self.send_result(Response.text("Sign in with an approved account.", 401))
-                query = urlencode({"service": service, "path": target.path + ("?" + target.query if target.query else "")})
-                return self.send_result(redirect(f"{identity.workspace_url}/auth/authorize?{query}"))
+                request = request_from_handler(self)
+                request.secure = identity.secure
+                response = identity.authorize_redirect(service, request)
+                return self.send_result(response, request.response_cookies)
             if isinstance(app, WebApplication):
                 return self.serve_web(app, service, target.path, target, user, identity)
         request = request_from_handler(self)
+        request.secure = identity.secure
         if main:
             known_path = request.path in {"/", "/login", "/signup", "/logout", "/forgot-password",
                                           "/auth/authorize", "/account/pending", "/account/password",
@@ -348,13 +375,15 @@ class DodoHandler(BaseHTTPRequestHandler):
             "PATH_INFO": decode(target.path), "QUERY_STRING": target.query,
             "SERVER_NAME": self.server.server_name, "SERVER_PORT": str(self.server.server_port),
             "SERVER_PROTOCOL": self.request_version, "REMOTE_ADDR": self.client_address[0],
-            "wsgi.version": (1, 0), "wsgi.url_scheme": "http",
+            "wsgi.version": (1, 0), "wsgi.url_scheme": identity.scheme,
             "wsgi.input": self.rfile, "wsgi.errors": sys.stderr,
             "wsgi.multithread": True, "wsgi.multiprocess": False, "wsgi.run_once": False,
         }
         for key, value in self.headers.items():
-            key = key.upper().replace("-", "_")
-            environ[key if key in {"CONTENT_TYPE", "CONTENT_LENGTH"} else "HTTP_" + key] = value
+            # WSGI normalizes dashes to underscores. Ignore aliases that could override trusted headers.
+            if "_" not in key:
+                key = key.upper().replace("-", "_")
+                environ[key if key in {"CONTENT_TYPE", "CONTENT_LENGTH"} else "HTTP_" + key] = value
 
         def start_response(status, headers):
             self.send_response(int(status.split()[0]))
@@ -405,6 +434,12 @@ class DodoHandler(BaseHTTPRequestHandler):
     def end_headers(self):
         self.send_header("X-Request-ID", request_id.get())
         self.send_header("X-Content-Type-Options", "nosniff")
+        if not any(line.lower().startswith(b"referrer-policy:") for line in getattr(self, "_headers_buffer", ())):
+            self.send_header("Referrer-Policy", "strict-origin")
+        if not any(line.lower().startswith(b"x-frame-options:") for line in getattr(self, "_headers_buffer", ())):
+            self.send_header("X-Frame-Options", "DENY")
+        if HTTPS:
+            self.send_header("Strict-Transport-Security", "max-age=86400")
         self.headers_sent = True
         super().end_headers()
 
@@ -421,6 +456,54 @@ class DodoHandler(BaseHTTPRequestHandler):
     def log_error(self, fmt, *args):
         # The base handler includes raw protocol input in some messages.
         log.debug("HTTP connection error client=%s", self.client_address[0])
+
+
+class DodoServer(ThreadingHTTPServer):
+    request_queue_size = 64
+
+    def __init__(self, address, tls):
+        self.tls = tls
+        self.slots = BoundedSemaphore(64)
+        super().__init__(address, DodoHandler)
+
+    def process_request(self, request, address):
+        if not self.slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, address)
+        except BaseException:
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request, address):
+        try:
+            request.settimeout(15)
+            if self.tls:
+                request = self.tls.wrap_socket(request, server_side=True)
+            super().process_request_thread(request, address)
+        except OSError:
+            self.shutdown_request(request)
+            log.debug("Connection closed before request handling")
+        finally:
+            self.slots.release()
+
+
+def tls_context():
+    if not HTTPS:
+        return None
+    certificate = os.environ.get("DODO_TLS_CERT_FILE", "").strip()
+    private_key = os.environ.get("DODO_TLS_KEY_FILE", "").strip()
+    if not certificate or not private_key:
+        raise SystemExit("DODO_HTTPS=true requires DODO_TLS_CERT_FILE and DODO_TLS_KEY_FILE.")
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.set_alpn_protocols(["http/1.1"])
+    try:
+        context.load_cert_chain(BASE_DIR / certificate, BASE_DIR / private_key, password="")
+    except (OSError, ValueError) as error:
+        raise SystemExit(f"Could not load the configured DodoStack TLS certificate and key ({type(error).__name__}).") from None
+    return context
 
 
 def main():
@@ -444,7 +527,7 @@ def main():
         except ValueError as error:
             parser.error(str(error))
         return
-    server = ThreadingHTTPServer((os.environ.get("DODO_HOST", "127.0.0.1"), PORT), DodoHandler)
+    server = DodoServer((os.environ.get("DODO_HOST", "127.0.0.1"), PORT), tls_context())
     for host, (identity, service) in HOST_ROUTES.items():
         if service is None and host == identity.workspace_host:
             print(f"DodoStack is running at {identity.workspace_url}")

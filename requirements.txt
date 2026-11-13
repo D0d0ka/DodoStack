@@ -4,6 +4,7 @@ itsdangerous>=2.2,<3
 SQLAlchemy>=2,<3
 WTForms>=3.2,<4
 requests>=2.31,<3
+urllib3>=2,<3
 beautifulsoup4>=4.12,<5
 python-dotenv>=1,<2
 Pillow>=11,<13

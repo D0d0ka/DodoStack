@@ -81,6 +81,7 @@
         </div>
     </main>
 
+    {% include "_csrf_fetch.html" %}
     <script>
         function previewProfilePic(event) {
             const file = event.target.files[0];
@@ -94,7 +95,7 @@
 
         function confirmDelete() {
             if (confirm('Are you sure you want to delete your DodoBook profile? This cannot be undone.')) {
-                fetch('/api/user/delete', { method: 'DELETE' })
+                bookFetch('/api/user/delete', { method: 'DELETE' })
                     .then(r => r.json())
                     .then(data => {
                         if (data.success) location.href = '{{ workspace_url }}/';
@@ -109,7 +110,7 @@
             const picFile = document.getElementById('profilepic').files[0];
             if (picFile) formData.set('profilepic', picFile);
 
-            fetch('/api/user/update', { method: 'POST', body: formData })
+            bookFetch('/api/user/update', { method: 'POST', body: formData })
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {

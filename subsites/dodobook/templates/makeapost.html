@@ -105,6 +105,7 @@
             </form>
         </div>
     </main>
+    {% include "_csrf_fetch.html" %}
     <script>
         let selectedMedia = [];
         let selectedFiles = [];
@@ -243,7 +244,7 @@
                 formData.append('postvideolinks', url);
             });
 
-            fetch('/api/posts/create', { method: 'POST', body: formData })
+            bookFetch('/api/posts/create', { method: 'POST', body: formData })
                 .then(r => {
                     if (r.redirected) {
                         window.location.href = r.url;

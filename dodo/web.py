@@ -13,13 +13,14 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 from wtforms import Form
 from werkzeug.datastructures import CombinedMultiDict
-from werkzeug.exceptions import HTTPException, Forbidden, NotFound, abort
+from werkzeug.exceptions import HTTPException, NotFound, abort
 from werkzeug.local import LocalProxy
 from werkzeug.routing import Map, Rule
 from werkzeug.utils import redirect, send_file as _file, send_from_directory as _directory
 from werkzeug.wrappers import Request, Response
 
 from .diagnostics import request_id
+from .framework import cookie_name
 from .pages import error_response
 
 _app = ContextVar("dodo_app")
@@ -189,8 +190,10 @@ class WebApplication(Blueprint):
         incoming.endpoint = ""
         incoming.adapter = self.url_map.bind(incoming.host, url_scheme=incoming.scheme)
         secret = self.config.get("SECRET_KEY") or identity.accounts.secret
-        serializer = URLSafeTimedSerializer(secret, salt=f"dodo-web:{service}:{admin}")
-        name = f"dodo_ui_{service}" + ("_admin" if admin else "")
+        session_cookie = identity.main_session if admin else identity.service_session
+        session = incoming.cookies.get(session_cookie, "")
+        serializer = URLSafeTimedSerializer(secret, salt=f"dodo-web:{service}:{admin}:{session}")
+        name = cookie_name(f"dodo_ui_{service}" + ("_admin" if admin else ""), identity.secure)
         raw = incoming.cookies.get(name)
         try:
             incoming.ui = serializer.loads(raw, max_age=86400) if raw else {}
@@ -212,9 +215,6 @@ class WebApplication(Blueprint):
                     if not admin and admin_endpoint and not self.admin.on_service:
                         self.logger.debug("Endpoint is available only on the workspace admin mount")
                         raise NotFound()
-                    if not same_origin(incoming):
-                        self.logger.debug("Rejected cross-origin request")
-                        raise Forbidden()
                     if user and self.profile_loader:
                         incoming.profile = self.profile_loader(user) or Guest()
                     elif user:
@@ -251,7 +251,8 @@ class WebApplication(Blueprint):
                 for callback in self.after:
                     response = callback(response)
                 if incoming.ui != original:
-                    response.set_cookie(name, serializer.dumps(incoming.ui), httponly=True, samesite="Lax")
+                    response.set_cookie(name, serializer.dumps(incoming.ui), httponly=True,
+                                        samesite="Lax", secure=identity.secure)
                 if admin:
                     response.headers["Cache-Control"] = "no-store"
             return response(environ, start_response)
@@ -263,15 +264,6 @@ class WebApplication(Blueprint):
         error = error_response(status, workspace_url=incoming.identity.workspace_url,
                                service=incoming.service, api=api, detail=detail)
         return Response(error.body, status=status, headers=error.headers)
-
-
-def same_origin(incoming):
-    if incoming.method in {"GET", "HEAD", "OPTIONS"}:
-        return True
-    if incoming.headers.get("Sec-Fetch-Site") in {"cross-site", "same-site"}:
-        return False
-    origin = incoming.headers.get("Origin")
-    return not origin or hmac.compare_digest(origin, incoming.host_url.rstrip("/"))
 
 
 def as_response(value):
@@ -366,7 +358,11 @@ def shared_signin(target="/", *, signup=False):
 
 
 def shared_signout():
-    return redirect(f"{request.identity.workspace_url}/logout?service={request.service}", 303)
+    identity = request.identity
+    result = identity.sign_out_service(request.shared_user)
+    response = Response(result.body, status=result.status, headers=result.headers)
+    response.delete_cookie(identity.service_session, secure=identity.secure, httponly=True, samesite="Lax")
+    return response
 
 
 def csrf_token():
@@ -381,7 +377,7 @@ def verify_form_token():
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         token = request.headers.get("X-CSRFToken") or request.form.get("csrf_token", "")
         expected = request.ui.get("csrf")
-        if not expected or not hmac.compare_digest(token, expected):
+        if not expected or not token.isascii() or not hmac.compare_digest(token, expected):
             current_app.logger.debug("Rejected invalid CSRF token")
             raise CSRFError()
 

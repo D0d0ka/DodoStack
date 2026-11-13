@@ -1,4 +1,7 @@
-from dodo.web import WebApplication, request, jsonify, send_from_directory, Response, shared_admin, render_template, shared_signin, shared_signout
+from dodo.web import (
+    WebApplication, request, jsonify, send_from_directory, Response, shared_admin,
+    render_template, shared_signin, shared_signout, verify_form_token,
+)
 import requests
 import re
 import json
@@ -13,6 +16,7 @@ from .crawler import crawler_manager
 FRONTEND = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
 
 app = WebApplication(__name__)
+app.before_request(verify_form_token)
 
 database.init_db()
 

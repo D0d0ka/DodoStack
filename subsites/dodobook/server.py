@@ -4,7 +4,7 @@ Dodobook – A private social network for friends.
 from dodo.web import (
     WebApplication, UserMixin, render_template, jsonify, request, redirect,
     url_for, flash, send_from_directory, current_user, require_login, shared_admin, abort,
-    shared_signin, shared_signout,
+    shared_signin, shared_signout, verify_form_token,
 )
 from dodo.orm import Database, Profiles
 from werkzeug.utils import secure_filename
@@ -23,6 +23,7 @@ from urllib.parse import urlsplit
 # ── App configuration ─────────────────────────────────────────────────────────
 
 app = WebApplication(__name__)
+app.before_request(verify_form_token)
 
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dodobook.db'

@@ -11,14 +11,40 @@ import logging
 import re
 import secrets
 import sqlite3
+from threading import Lock
 import time
 
 from email_validator import EmailNotValidError, validate_email
 
-from .framework import Request, Response, redirect
+from .framework import Request, Response, cookie_name, redirect
 from . import pages
 
 log = logging.getLogger(__name__)
+
+
+class AuthRateLimit:
+    """Limit password work per peer and across the process."""
+    window = 60
+
+    def __init__(self):
+        self.lock = Lock()
+        self.deadline = 0
+        self.total = 0
+        self.peers = {}
+
+    def retry_after(self, peer):
+        with self.lock:
+            now = time.monotonic()
+            if now >= self.deadline:
+                self.deadline = now + self.window
+                self.total = 0
+                self.peers.clear()
+            count = self.peers.get(peer, 0)
+            if count >= 10 or self.total >= 120:
+                return int(self.deadline - now) + 1
+            self.peers[peer] = count + 1
+            self.total += 1
+            return 0
 
 
 def local_path(path: str) -> str:
@@ -56,6 +82,15 @@ class AccountStore:
                 password_reset_requested INTEGER NOT NULL DEFAULT 0,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
             db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users(lower(email))")
+            db.execute("""CREATE TABLE IF NOT EXISTS redeemed_tickets (
+                nonce TEXT PRIMARY KEY, expires INTEGER NOT NULL
+            )""")
+
+    def redeem_ticket(self, nonce, expires):
+        with self.connect() as db:
+            db.execute("DELETE FROM redeemed_tickets WHERE expires < ?", (int(time.time()),))
+            return db.execute("INSERT OR IGNORE INTO redeemed_tickets VALUES (?, ?)",
+                              (nonce, expires)).rowcount == 1
 
     def connect(self):
         db = sqlite3.connect(self.path)
@@ -86,6 +121,8 @@ class AccountStore:
             return False
 
     def authenticate(self, identifier: str, password: str):
+        if len(identifier) > 254 or not 1 <= len(password) <= 255:
+            return None
         if "@" in identifier:
             try:
                 identifier = normalized_email(identifier)
@@ -200,7 +237,7 @@ class AccountStore:
             return None
 
     def read_claims(self, token: str | None, audience: str):
-        if not token or "." not in token:
+        if not token or "." not in token or not token.isascii():
             return None
         encoded, signature = token.rsplit(".", 1)
         expected = hmac.new(self.secret, encoded.encode(), hashlib.sha256).hexdigest()
@@ -216,13 +253,41 @@ class AccountStore:
 
 
 class Identity:
-    def __init__(self, accounts: AccountStore, services: dict[str, str], port: int, *, private=False, workspace_host="localhost"):
+    def __init__(self, accounts: AccountStore, services: dict[str, str], port: int, *,
+                 private=False, workspace_host="localhost", secure=False):
         self.accounts, self.services, self.port = accounts, services, port
         self.workspace_host = workspace_host
-        self.port_suffix = "" if port == 80 else f":{port}"
-        self.workspace_url = f"http://{workspace_host}{self.port_suffix}"
+        self.secure = secure
+        self.scheme = "https" if secure else "http"
+        self.port_suffix = "" if port == (443 if secure else 80) else f":{port}"
+        self.workspace_url = f"{self.scheme}://{workspace_host}{self.port_suffix}"
         self.private = private
-        self.main_session = "dodo_main_session"
+        self.main_session = cookie_name("dodo_main_session", secure)
+        self.service_session = cookie_name("dodo_session", secure)
+        self.service_flow = cookie_name("dodo_signin_flow", secure)
+        self.form_session = cookie_name("dodo_form", secure)
+
+    def form_token(self, request):
+        session = request.cookies.get(self.main_session)
+        if session:
+            return self.csrf_token(session, "workspace")
+        session = request.cookies.get(self.form_session, "")
+        if not re.fullmatch(r"[a-f0-9]{64}", session):
+            session = secrets.token_hex(32)
+            request.set_cookie(self.form_session, session, max_age=3600)
+        return self.csrf_token(session, "anonymous")
+
+    def csrf_token(self, session, purpose):
+        return hmac.new(self.accounts.secret, f"csrf:{purpose}:{session}".encode(), hashlib.sha256).hexdigest()
+
+    @staticmethod
+    def valid_form(request, expected):
+        supplied = request.form.get("csrf", [""])[0]
+        return supplied.isascii() and hmac.compare_digest(expected, supplied)
+
+    def sign_out_service(self, user):
+        self.accounts.revoke_sessions(user["id"])
+        return redirect(self.workspace_url + "/")
 
     def main_user(self, request: Request):
         return self.session_user(request.cookies.get(self.main_session), "server")
@@ -253,12 +318,12 @@ class Identity:
         """Create a brief signed user assertion for a trusted service call."""
         if source_service not in self.services or target_service not in self.services:
             raise ValueError("Assertions can only be issued between registered services")
-        return self.accounts.issue({"sub": user["id"], "name": user["username"], "ver": self.accounts.session_version(user["id"]), "aud": target_service,
+        return self.accounts.issue({"sub": user["id"], "name": user["username"], "ver": self.accounts.session_version(user["id"]), "aud": "assertion:" + target_service,
                                    "iss": source_service, "claims": claims or {},
                                    "exp": int(time.time()) + max(1, min(ttl, 300))})
 
     def verify_assertion(self, source_service: str, target_service: str, token: str):
-        payload = self.accounts.read_claims(token, target_service)
+        payload = self.accounts.read_claims(token, "assertion:" + target_service)
         if not payload or payload.get("iss") != source_service or not self.accounts.is_current(payload):
             return None
         user = self.accounts.account(int(payload["sub"]))
@@ -269,32 +334,46 @@ class Identity:
 
     def service_url(self, service: str, path: str = "/"):
         host = self.services[service]
-        return f"http://{host}{self.port_suffix}{path}"
+        return f"{self.scheme}://{host}{self.port_suffix}{path}"
 
     def authorize_redirect(self, service: str, request: Request):
         path = request.path
         if request.query:
             path += "?" + urlencode([(key, value) for key, values in request.query.items() for value in values])
-        query = urlencode({"service": service, "path": path})
-        return redirect(f"{self.workspace_url}/auth/authorize?{query}")
+        state = request.cookies.get(self.service_flow, "")
+        if not re.fullmatch(r"[a-f0-9]{64}", state):
+            state = secrets.token_hex(32)
+            request.set_cookie(self.service_flow, state, max_age=900)
+        challenge = self.csrf_token(state, "signin:" + self.services[service])
+        query = urlencode({"service": service, "path": path, "state": challenge})
+        response = redirect(f"{self.workspace_url}/auth/authorize?{query}")
+        response.headers.update({"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+        return response
 
     def handle_service(self, service: str, request: Request):
-        if request.path in {"/_auth/logout", "/_auth/complete", "/_auth/callback"}:
+        if request.path in {"/_auth/complete", "/_auth/callback"}:
             log.debug("Shared service authentication endpoint=%s service=%s", request.path, service)
-        if request.path == "/_auth/logout":
-            return Response(b"", 200, {"Content-Type": "text/html; charset=utf-8", "Set-Cookie": "dodo_session=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly", "Refresh": "0; url=/"})
+            if request.method != "GET":
+                response = Response.text("This address accepts GET.", 405)
+                response.headers["Allow"] = "GET"
+                return response
         if request.path == "/_auth/complete":
-            if not self.get_service_user(service, request.cookies.get("dodo_session")):
+            if not self.get_service_user(service, request.cookies.get(self.service_session)):
                 return self.sign_in_problem(
                     service, "Allow cookies for this service and try signing in again.", 403,
                 )
             response = redirect(local_path(request.value("path", "/")))
         elif request.path == "/_auth/callback":
-            ticket = self.accounts.read_claims(request.value("ticket"), "ticket:" + service)
-            if not ticket or not self.accounts.is_current(ticket):
+            ticket = self.accounts.read_claims(request.value("ticket"), "ticket:" + self.services[service])
+            state = request.cookies.get(self.service_flow, "")
+            challenge = self.csrf_token(state, "signin:" + self.services[service])
+            if (not ticket or not self.accounts.is_current(ticket)
+                    or not state or ticket.get("state") != challenge
+                    or not ticket.get("nonce")
+                    or not self.accounts.redeem_ticket(ticket["nonce"], ticket["exp"])):
                 log.debug("Service sign-in ticket rejected service=%s", service)
                 return self.sign_in_problem(
-                    service, "This sign-in link has expired. Start again from the service.", 400,
+                    service, "This sign-in link has expired or was already used. Start again from the service.", 400,
                 )
             user = self.accounts.account(int(ticket["sub"]))
             if not user or self.account_destination(user):
@@ -304,7 +383,7 @@ class Identity:
                 "sub": ticket["sub"], "name": ticket["name"], "aud": service,
                 "ver": ticket["ver"], "exp": int(time.time()) + lifetime,
             })
-            request.set_cookie("dodo_session", session, max_age=lifetime)
+            request.set_cookie(self.service_session, session, max_age=lifetime)
             response = redirect("/_auth/complete?" + urlencode({"path": ticket["path"]}))
         else:
             return None
@@ -321,6 +400,15 @@ class Identity:
     def handle_main(self, request: Request, *, api=False):
         user = self.main_user(request)
         path = request.path
+        if path == "/logout" and request.method != "POST":
+            response = Response.text("Sign out using the workspace form.", 405)
+            response.headers["Allow"] = "POST"
+            return response
+        token = ""
+        if path in {"/login", "/signup", "/forgot-password", "/logout", "/auth/authorize"}:
+            token = self.form_token(request)
+            if request.method == "POST" and not self.valid_form(request, token):
+                return Response.text("Invalid security token.", 403)
         if user and path != "/logout":
             destination = self.account_destination(user)
             if destination and path != destination:
@@ -330,11 +418,12 @@ class Identity:
                 return redirect("/login")
             if user["approved"]:
                 return redirect("/")
-            response = Response.html(pages.pending_page())
+            response = Response.html(pages.pending_page(self.form_token(request)))
             response.headers["Cache-Control"] = "no-store"
             return response
         if path == "/auth/authorize":
             service, target = request.value("service"), request.value("path", "/")
+            state = request.value("state")
             if service not in self.services:
                 return pages.error_response(404, title="Unknown DodoStack service",
                                             detail="The requested service is not registered in this workspace.",
@@ -342,16 +431,19 @@ class Identity:
             if not target.startswith("/") or target.startswith("//"):
                 target = "/"
             if user:
-                return self._issue_ticket(service, user, target)
-            return self.auth_form("login", service, target)
+                return self._issue_ticket(service, user, target, state)
+            return self.auth_form("login", service, target, token=token, state=state)
         if path == "/forgot-password":
             submitted = request.method == "POST"
             if submitted:
                 self.accounts.request_password_reset(request.value("username").strip())
-            return Response.html(pages.reset_request_page(submitted))
+            response = Response.html(pages.reset_request_page(submitted, token))
+            response.headers["Cache-Control"] = "no-store"
+            return response
         if path in {"/login", "/signup"}:
             mode = "signup" if path == "/signup" else "login"
             service, target = request.value("service"), request.value("path", "/")
+            state = request.value("state")
             if request.method == "POST":
                 fields = {key: request.form.get(key, [""])[0] for key in
                           ("username", "email", "password", "password_confirmation")}
@@ -380,35 +472,34 @@ class Identity:
                     log.debug("Shared account %s accepted", mode)
                     version = self.accounts.session_version(user["id"])
                     request.set_cookie(self.main_session, self.accounts.issue({"sub": user["id"], "name": user["username"], "aud": "server", "ver": version, "exp": int(time.time()) + 30 * 86400}), max_age=30 * 86400)
+                    request.delete_cookie(self.form_session)
                     destination = self.account_destination(user)
                     if destination:
                         return redirect(destination)
                     if service in self.services:
-                        return self._issue_ticket(service, user, target)
+                        return self._issue_ticket(service, user, target, state)
                     return redirect("/")
                 log.debug("Shared account %s rejected", mode)
-                return self.auth_form(mode, service, target, error=error, fields=fields)
+                return self.auth_form(mode, service, target, error=error, fields=fields, token=token, state=state)
             if user:
-                return self._issue_ticket(service, user, target) if service in self.services else redirect("/")
-            return self.auth_form(mode, service, target)
+                return self._issue_ticket(service, user, target, state) if service in self.services else redirect("/")
+            return self.auth_form(mode, service, target, token=token, state=state)
         if path == "/logout":
             if user:
                 self.accounts.revoke_sessions(user["id"])
             request.delete_cookie(self.main_session)
-            service = request.value("service")
-            if service in self.services:
-                ticket = self.accounts.issue({"sub": 0, "name": "", "aud": "logout:" + service, "exp": int(time.time()) + 90})
-                response = redirect(self.service_url(service, "/_auth/logout?ticket=" + quote(ticket)))
-            else:
-                response = redirect("/")
-            return response
+            request.delete_cookie(self.form_session)
+            return redirect("/")
         if path == "/":
             selected = request.value("service")
             if selected in self.services:
                 return redirect(self.service_url(selected))
-            return Response.html(pages.dashboard(
+            response = Response.html(pages.dashboard(
                 user, {key: self.service_url(key) for key in self.services}, private=self.private,
+                token=self.form_token(request) if user else "",
             ))
+            response.headers["Cache-Control"] = "no-store"
+            return response
         return Response.text("Not found", 404)
 
     def auth_form(self, mode, service, target, **values):
@@ -419,11 +510,18 @@ class Identity:
         response.headers["Cache-Control"] = "no-store"
         return response
 
-    def _issue_ticket(self, service, user, target):
+    def _issue_ticket(self, service, user, target, state):
+        target = local_path(target)
+        if not re.fullmatch(r"[a-f0-9]{64}", state):
+            return redirect(self.service_url(service, target), 303)
         ticket = self.accounts.issue({
             "sub": user["id"], "name": user["username"],
             "ver": self.accounts.session_version(user["id"]),
-            "aud": "ticket:" + service, "exp": int(time.time()) + 120,
-            "path": local_path(target),
+            "aud": "ticket:" + self.services[service], "exp": int(time.time()) + 120,
+            "nonce": secrets.token_hex(24),
+            "path": target,
+            "state": state,
         })
-        return redirect(self.service_url(service, "/_auth/callback?ticket=" + quote(ticket)))
+        response = redirect(self.service_url(service, "/_auth/callback?ticket=" + quote(ticket)))
+        response.headers.update({"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+        return response

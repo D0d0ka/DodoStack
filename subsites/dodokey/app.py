@@ -51,7 +51,7 @@ def secure_response(response):
         "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; "
         "connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     )
-    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Referrer-Policy"] = "strict-origin"
     return response
 
 

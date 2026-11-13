@@ -171,8 +171,11 @@ let _adminHistoryItems = [];
 let _adminRecommendedItems = [];
 let _lastCrawlLogSignature = '';
 
-function adminHeaders() {
-  return { 'Content-Type': 'application/json' };
+function jsonHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content,
+  };
 }
 
 /* ── Page init ─────────────────────────────────────────────────────────── */
@@ -1199,7 +1202,7 @@ async function searchAi(query) {
   try {
     const res = await fetch(`${API}/ai`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: jsonHeaders(),
       body: JSON.stringify({ query: normalizedQuery }),
     });
     if (!res.ok) {
@@ -1297,7 +1300,7 @@ async function addUrls() {
     try {
       const res  = await fetch(`${API}/crawl`, {
         method:  'POST',
-        headers: adminHeaders(),
+        headers: jsonHeaders(),
         body:    JSON.stringify({ url }),
       });
       const data = await res.json();
@@ -1338,12 +1341,12 @@ async function addUrls() {
       if (!confirm(`${dupes} URL-i on juba crawlitud (${domainList}).\nKas soovid need domeenid uuesti crawlida?`)) return;
       for (const domain of dupeDomains) {
         try {
-          const checkRes = await fetch(`${API}/admin/domains/check?domain=${encodeURIComponent(domain)}`, { headers: adminHeaders() });
+          const checkRes = await fetch(`${API}/admin/domains/check?domain=${encodeURIComponent(domain)}`, { headers: jsonHeaders() });
           const checkData = await checkRes.json();
           if (!checkData.success || checkData.count === 0) continue;
           await fetch(`${API}/admin/domains/recrawl`, {
             method: 'POST',
-            headers: adminHeaders(),
+            headers: jsonHeaders(),
             body: JSON.stringify({ domain }),
           });
         } catch { /* silently ignore per-domain errors */ }
@@ -1364,7 +1367,7 @@ async function backfillMedia() {
   try {
     const res = await fetch(`${API}/backfill-media`, {
       method: 'POST',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({}),
     });
     const data = await res.json();
@@ -1387,7 +1390,7 @@ async function backfillMedia() {
 
 async function refreshQueue() {
   try {
-    const res  = await fetch(`${API}/queue`, isAdminPage ? { headers: adminHeaders() } : undefined);
+    const res  = await fetch(`${API}/queue`, isAdminPage ? { headers: jsonHeaders() } : undefined);
     const data = await res.json();
     renderQueue(data.queue ?? []);
   } catch { /* silently ignore */ }
@@ -1423,7 +1426,7 @@ async function removeQueueUrl(url) {
   try {
     const res = await fetch(`${API}/queue`, {
       method: 'DELETE',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({ url }),
     });
     const data = await res.json();
@@ -1451,7 +1454,7 @@ async function startCrawl() {
   try {
     const res  = await fetch(`${API}/start-crawl`, {
       method:  'POST',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body:    JSON.stringify({ max_depth }),
     });
     const data = await res.json();
@@ -1575,7 +1578,7 @@ async function saveAdminSettings() {
   try {
     const response = await fetch(`${API}/admin/settings`, {
       method: 'POST',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({ai_model: model}),
     });
     const data = await response.json();
@@ -1599,7 +1602,7 @@ function initAdminSettingsPanel() {
 async function loadAdminSettings() {
   if (!$('aiModelInput')) return;
   try {
-    const res = await fetch(`${API}/admin/settings`, { headers: adminHeaders() });
+    const res = await fetch(`${API}/admin/settings`, { headers: jsonHeaders() });
     if (!res.ok) throw new Error("Could not load settings");
     const data = await res.json();
     if (data.success) $('aiModelInput').value = data.ai_model || '';
@@ -1648,7 +1651,7 @@ async function loadSearchHistory() {
   if (!list) return;
 
   try {
-    const res = await fetch(`${API}/admin/search-history?limit=200`, { headers: adminHeaders() });
+    const res = await fetch(`${API}/admin/search-history?limit=200`, { headers: jsonHeaders() });
     const data = await res.json();
     if (!data.success) throw new Error(data.message || 'Load failed');
     _adminHistoryItems = data.items || [];
@@ -1713,7 +1716,7 @@ async function addSearchHistoryEntry() {
   try {
     const res = await fetch(`${API}/admin/search-history`, {
       method: 'POST',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({ query, count: Number.isFinite(count) ? count : 1 }),
     });
     const data = await res.json();
@@ -1739,7 +1742,7 @@ async function deleteSearchHistoryEntry(query) {
   try {
     const res = await fetch(`${API}/admin/search-history`, {
       method: 'DELETE',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({ query }),
     });
     const data = await res.json();
@@ -1761,7 +1764,7 @@ async function clearSearchHistory() {
   try {
     const res = await fetch(`${API}/admin/search-history`, {
       method: 'DELETE',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({}),
     });
     const data = await res.json();
@@ -1800,7 +1803,7 @@ async function loadRecommendedEntries() {
   if (!list) return;
 
   try {
-    const res = await fetch(`${API}/admin/recommended?limit=500`, { headers: adminHeaders() });
+    const res = await fetch(`${API}/admin/recommended?limit=500`, { headers: jsonHeaders() });
     const data = await res.json();
     if (!data.success) throw new Error(data.message || 'Load failed');
     _adminRecommendedItems = data.items || [];
@@ -1853,7 +1856,7 @@ async function addRecommendedEntry() {
   try {
     const res = await fetch(`${API}/admin/recommended`, {
       method: 'POST',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({ query, title, url }),
     });
     const data = await res.json();
@@ -1880,7 +1883,7 @@ async function deleteRecommendedEntry(id) {
   try {
     const res = await fetch(`${API}/admin/recommended`, {
       method: 'DELETE',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({ id }),
     });
     const data = await res.json();
@@ -1902,7 +1905,7 @@ async function clearRecommendedEntries() {
   try {
     const res = await fetch(`${API}/admin/recommended`, {
       method: 'DELETE',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({}),
     });
     const data = await res.json();
@@ -1968,7 +1971,7 @@ async function deleteDomain() {
   try {
     const res = await fetch(`${API}/admin/domains`, {
       method: 'DELETE',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({ domain }),
     });
     const data = await res.json();
@@ -1989,7 +1992,7 @@ async function recrawlDomain() {
   const domain = (input?.value || '').trim();
   if (!domain || !fb) return;
   try {
-    const checkRes = await fetch(`${API}/admin/domains/check?domain=${encodeURIComponent(domain)}`, { headers: adminHeaders() });
+    const checkRes = await fetch(`${API}/admin/domains/check?domain=${encodeURIComponent(domain)}`, { headers: jsonHeaders() });
     const checkData = await checkRes.json();
     if (!checkData.success || checkData.count === 0) {
       fb.textContent = `Domeenil "${checkData.domain || domain}" pole ühtegi lehte`;
@@ -2000,7 +2003,7 @@ async function recrawlDomain() {
     if (!confirm(`Domeenil "${checkData.domain}" on ${checkData.count} lehte. Lisada kõik crawl-järjekorda?`)) return;
     const res = await fetch(`${API}/admin/domains/recrawl`, {
       method: 'POST',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({ domain }),
     });
     const data = await res.json();
@@ -2022,7 +2025,7 @@ async function loadHiddenDomains() {
   const list = $('hiddenDomainsList');
   if (!list) return;
   try {
-    const res = await fetch(`${API}/admin/hidden-domains`, { headers: adminHeaders() });
+    const res = await fetch(`${API}/admin/hidden-domains`, { headers: jsonHeaders() });
     const data = await res.json();
     if (!data.success) throw new Error(data.message || 'Load failed');
     renderHiddenDomainsList(data.domains || []);
@@ -2055,7 +2058,7 @@ async function addHiddenDomain() {
   try {
     const res = await fetch(`${API}/admin/hidden-domains`, {
       method: 'POST',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({ domain }),
     });
     const data = await res.json();
@@ -2079,7 +2082,7 @@ async function removeHiddenDomain(domain) {
   try {
     const res = await fetch(`${API}/admin/hidden-domains`, {
       method: 'DELETE',
-      headers: adminHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({ domain }),
     });
     const data = await res.json();

@@ -5,56 +5,78 @@ import logging
 from collections import deque
 from urllib.parse import parse_qs, urljoin, urlparse
 
-import requests
+from urllib3 import HTTPConnectionPool, HTTPSConnectionPool
+from urllib3.exceptions import HTTPError, TimeoutError as FetchTimeout
+from urllib3.util import Timeout
+from urllib3.util import parse_url
 from bs4 import BeautifulSoup
 
 from .database import get_page_urls, replace_media_assets, upsert_page, url_exists
 
 logger = logging.getLogger(__name__)
 
-# ── SSRF kaitse ────────────────────────────────────────────────────────────
-_PRIVATE_NETWORKS = [
-    ipaddress.ip_network('0.0.0.0/8'),
-    ipaddress.ip_network('10.0.0.0/8'),
-    ipaddress.ip_network('100.64.0.0/10'),   # CGNAT
-    ipaddress.ip_network('127.0.0.0/8'),     # loopback
-    ipaddress.ip_network('169.254.0.0/16'),  # link-local / AWS metadata
-    ipaddress.ip_network('172.16.0.0/12'),   # private
-    ipaddress.ip_network('192.168.0.0/16'),  # private
-    ipaddress.ip_network('::1/128'),         # IPv6 loopback
-    ipaddress.ip_network('fc00::/7'),        # IPv6 private
-    ipaddress.ip_network('fe80::/10'),       # IPv6 link-local
-]
+class BlockedDestination(ValueError):
+    pass
 
 
-def _is_ssrf_safe(hostname: str) -> bool:
-    """Tagasta True ainult siis, kui hostname lahendub avalikule IP-le."""
-    if not hostname:
-        return False
-    try:
-        infos = socket.getaddrinfo(hostname, None)
-        for _, _, _, _, sockaddr in infos:
-            ip = ipaddress.ip_address(sockaddr[0])
-            if ip.is_loopback or ip.is_link_local or ip.is_private or ip.is_reserved:
-                return False
-            if any(ip in net for net in _PRIVATE_NETWORKS):
-                return False
-        return True
-    except (socket.gaierror, ValueError):
-        return False
+GLOBAL_IPV6 = ipaddress.ip_network("2000::/3")
 
 
-def _ssrf_redirect_hook(response, *args, **kwargs):
-    """Blokeeri redirectid sisestele aadressidele."""
-    if response.is_redirect:
-        location = response.headers.get('Location', '')
-        target = urlparse(urljoin(response.url, location))
-        hostname = target.hostname or ''
-        if not _is_ssrf_safe(hostname):
-            raise ValueError(f'SSRF: redirect blocked to {hostname}')
+def public_destination(url):
+    # Use the same parser and normalized path as the HTTP client.
+    target = parse_url(url)
+    if (target.scheme not in {"http", "https"} or not target.host or target.auth is not None
+            or target.port == 0):
+        raise BlockedDestination()
+    hostname = target.host.strip("[]")
+    port = target.port or (443 if target.scheme == "https" else 80)
+    records = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+    addresses = [ipaddress.ip_address(record[4][0]) for record in records]
+    if not addresses or any(not address.is_global or address.is_multicast or address.is_reserved
+                            or address.is_loopback or address.is_link_local
+                            or (address.version == 6 and
+                                (address not in GLOBAL_IPV6 or address.sixtofour or address.teredo))
+                            for address in addresses):
+        raise BlockedDestination()
+    return target, str(addresses[0]), hostname, port
 
 
-HEADERS = {'User-Agent': 'Mozilla/5.0 (compatible; DoodleBot/1.0)'}
+def fetch_page(url):
+    for _ in range(6):
+        target, address, hostname, port = public_destination(url)
+        if target.scheme == "https":
+            pool = HTTPSConnectionPool(address, port, server_hostname=hostname,
+                                       assert_hostname=hostname, cert_reqs="CERT_REQUIRED")
+        else:
+            pool = HTTPConnectionPool(address, port)
+        response = None
+        try:
+            response = pool.urlopen("GET", target.request_uri, headers={**HEADERS, "Host": target.netloc},
+                                    timeout=Timeout(connect=REQUEST_TIMEOUT, read=REQUEST_TIMEOUT),
+                                    redirect=False, retries=False, preload_content=False,
+                                    decode_content=False)
+            if response.status in {301, 302, 303, 307, 308} and response.headers.get("Location"):
+                url = urljoin(url, response.headers["Location"])
+                continue
+            if not 200 <= response.status < 300:
+                return url, None, f"HTTP {response.status}"
+            if response.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "text/html":
+                return url, None, "Skipped — not HTML"
+            if response.headers.get("Content-Encoding", "identity").lower() != "identity":
+                return url, None, "Skipped — unsupported content encoding"
+            content = response.read(MAX_RESPONSE_BYTES + 1, decode_content=False)
+            if len(content) > MAX_RESPONSE_BYTES:
+                return url, None, "Skipped — response is too large"
+            return url, content, None
+        finally:
+            if response is not None:
+                response.close()
+            pool.close()
+    return url, None, "Too many redirects"
+
+
+HEADERS = {'User-Agent': 'Mozilla/5.0 (compatible; DoodleBot/1.0)', 'Accept-Encoding': 'identity'}
+MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 REQUEST_TIMEOUT = 10          # seconds
 MAX_LINKS_PER_PAGE = 15       # links to enqueue per crawled page
 MAX_CONTENT_CHARS = 50_000    # chars stored in DB
@@ -80,17 +102,12 @@ class CrawlerManager:
             url = 'https://' + url
 
         try:
-            parsed = urlparse(url)
-            hostname = parsed.hostname
-            port = parsed.port
-        except ValueError:
-            return False, 'Invalid URL'
-        if not hostname or port == 0:
-            return False, 'Invalid URL'
-
-        if not _is_ssrf_safe(hostname):
+            _, _, hostname, _ = public_destination(url)
+        except BlockedDestination:
             logger.warning('SSRF blocked (queue)')
-            return False, 'URL points to a private or reserved address — not allowed'
+            return False, 'URL must point to a public HTTP or HTTPS address'
+        except (HTTPError, OSError, ValueError):
+            return False, 'Invalid or unreachable URL'
 
         with self._lock:
             queued_urls = {u for u, _ in self._queue}
@@ -221,24 +238,10 @@ class CrawlerManager:
     def _crawl_one(self, url: str, depth: int, max_depth: int, visited: set[str]) -> tuple[bool, str]:
         logger.debug('Crawling URL depth=%d', depth)
         try:
-            parsed_check = urlparse(url)
-            if not _is_ssrf_safe(parsed_check.hostname or ''):
-                logger.warning('SSRF blocked (crawl)')
-                return False, 'Blocked — private or reserved address'
-
-            resp = requests.get(
-                url,
-                headers=HEADERS,
-                timeout=REQUEST_TIMEOUT,
-                hooks={'response': _ssrf_redirect_hook},
-            )
-            resp.raise_for_status()
-
-            ctype = resp.headers.get('Content-Type', '')
-            if 'text/html' not in ctype:
-                return False, f'Skipped — not HTML ({ctype.split(";")[0]})'
-
-            soup = BeautifulSoup(resp.text, 'html.parser')
+            final_url, content, error = fetch_page(url)
+            if error:
+                return False, error
+            soup = BeautifulSoup(content, 'html.parser')
 
             # title
             tag = soup.find('title')
@@ -253,13 +256,13 @@ class CrawlerManager:
             if page_id is None:
                 return False, 'Failed to save page'
 
-            assets = self._extract_media_assets(soup, resp.url, title)
+            assets = self._extract_media_assets(soup, final_url, title)
             replace_media_assets(page_id, assets)
             logger.debug('Saved crawled page id=%s', page_id)
 
             # recurse
             if depth < max_depth:
-                links = self._extract_links(soup, resp.url, parsed_check.netloc)
+                links = self._extract_links(soup, final_url, urlparse(url).netloc)
                 with self._lock:
                     queued = {u for u, _ in self._queue}
                     added = 0
@@ -273,18 +276,16 @@ class CrawlerManager:
 
             return True, f'Saved — {title[:60]}'
 
-        except requests.exceptions.Timeout:
-            logger.warning('Crawl request timed out')
+        except BlockedDestination:
+            logger.warning('SSRF blocked (crawl)')
+            return False, 'Blocked — URL must point to a public HTTP or HTTPS address'
+        except FetchTimeout:
             return False, 'Request timed out'
-        except requests.exceptions.ConnectionError:
-            logger.warning('Crawl connection failed')
+        except (HTTPError, OSError):
             return False, 'Connection error'
-        except requests.exceptions.HTTPError as exc:
-            logger.warning('Crawl returned HTTP %s', exc.response.status_code)
-            return False, f'HTTP {exc.response.status_code}'
-        except Exception as exc:
+        except Exception:
             logger.exception('Unexpected crawl error')
-            return False, f'Error: {exc}'
+            return False, 'Could not crawl page'
 
     @staticmethod
     def _extract_links(soup: BeautifulSoup, base_url: str, allowed_domain: str) -> list[str]:

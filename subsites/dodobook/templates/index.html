@@ -202,7 +202,8 @@
                     {% if can_moderate %}<a href="{{ url_for('adminboard') }}">Moderation</a>{% endif %}
                     <a href="/makeapost">Make a post</a>
                     <div class="divider"></div>
-                    <form method="post" action="/logout"><button type="submit">Sign out</button></form>
+                    <form method="post" action="/logout">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit">Sign out</button></form>
                 </div>
             </div>
         </div>
@@ -470,6 +471,7 @@
         </div>
     </div>
 
+    {% include "_csrf_fetch.html" %}
     <script>
         // ── Current user info ─────────────────────────────────────────────────
         const CURRENT_USER_ID = {{ current_user.id }};
@@ -509,7 +511,7 @@
 
         // ── Friend / group invitation responses ───────────────────────────────
         function respondFriendReq(id, action, btn) {
-            fetch('/api/friends/respond', {
+            bookFetch('/api/friends/respond', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({friendship_id: id, action: action})
@@ -522,7 +524,7 @@
         }
 
         function respondGroupInv(groupId, action, btn) {
-            fetch('/api/groups/' + groupId + '/respond', {
+            bookFetch('/api/groups/' + groupId + '/respond', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({action: action})
@@ -589,7 +591,7 @@
             const poll = new AbortController();
             chatPoll = poll;
             try {
-                const response = await fetch(
+                const response = await bookFetch(
                     `/api/chat/messages?type=${activeChatType}&id=${activeChatId}&after=${lastMessageId}`,
                     { signal: poll.signal }
                 );
@@ -723,7 +725,7 @@
 
             button.disabled = true;
             try {
-                const response = await fetch('/api/chat/message', { method: 'POST', body: formData });
+                const response = await bookFetch('/api/chat/message', { method: 'POST', body: formData });
                 const data = await response.json();
                 if (!response.ok || !data.success) {
                     alert(data.message || 'Could not send the message.');
@@ -781,7 +783,7 @@
         function leaveCurrentChat() {
             if (!activeChatType || activeChatType !== 'group') return;
             if (!confirm('Leave this group?')) return;
-            fetch('/api/groups/' + activeChatId + '/leave', { method: 'POST' })
+            bookFetch('/api/groups/' + activeChatId + '/leave', { method: 'POST' })
                 .then(r => r.json())
                 .then(data => { if (data.success) { clearInterval(pollingInterval); location.reload(); } });
         }
@@ -789,7 +791,7 @@
         function unfriendCurrentChat() {
             if (!activeChatType || activeChatType !== 'direct') return;
             if (!confirm('Remove this friend?')) return;
-            fetch('/api/friends/' + activeChatId, { method: 'DELETE' })
+            bookFetch('/api/friends/' + activeChatId, { method: 'DELETE' })
                 .then(r => r.json())
                 .then(data => { if (data.success) { clearInterval(pollingInterval); location.reload(); } });
         }
@@ -800,7 +802,7 @@
             document.getElementById('inviteSearchInput').value = '';
             document.getElementById('inviteSearchResults').innerHTML = '';
 
-            fetch('/api/friends/list?exclude_group=' + activeChatId)
+            bookFetch('/api/friends/list?exclude_group=' + activeChatId)
                 .then(r => r.json())
                 .then(data => {
                     const list = document.getElementById('inviteFriendsList');
@@ -824,7 +826,7 @@
             clearTimeout(inviteSearchTimer);
             if (q.trim().length < 2) { resultsEl.innerHTML = ''; return; }
             inviteSearchTimer = setTimeout(() => {
-                fetch('/api/friends/search?q=' + encodeURIComponent(q.trim()))
+                bookFetch('/api/friends/search?q=' + encodeURIComponent(q.trim()))
                     .then(r => r.json())
                     .then(data => {
                         resultsEl.innerHTML = '';
@@ -857,7 +859,7 @@
         }
 
         function inviteFriend(userId, btn) {
-            fetch('/api/groups/' + activeChatId + '/invite', {
+            bookFetch('/api/groups/' + activeChatId + '/invite', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({user_id: userId})
@@ -882,7 +884,7 @@
         // ── Group Members modal ───────────────────────────────────────────────
         function openMembersModal() {
             if (activeChatType !== 'group') return;
-            fetch('/api/groups/' + activeChatId + '/members')
+            bookFetch('/api/groups/' + activeChatId + '/members')
                 .then(r => r.json())
                 .then(data => {
                     const list = document.getElementById('membersList');
@@ -915,7 +917,7 @@
             const nameEl = btn.closest('.member-item').querySelector('.member-name');
             const name = nameEl ? nameEl.textContent : 'this member';
             if (!confirm(`Kick ${name} from the group?`)) return;
-            fetch(`/api/groups/${activeChatId}/kick/${userId}`, { method: 'POST' })
+            bookFetch(`/api/groups/${activeChatId}/kick/${userId}`, { method: 'POST' })
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
@@ -932,7 +934,7 @@
 
         // ── Unread badge polling ───────────────────────────────────────────────
         function pollUnread() {
-            fetch('/api/unread')
+            bookFetch('/api/unread')
                 .then(r => r.json())
                 .then(data => {
                     // Update online/offline indicators
@@ -990,7 +992,7 @@
 
         // ── Post: like ────────────────────────────────────────────────────────
         function toggleLike(postId, button) {
-            fetch('/api/posts/' + postId + '/like', { method: 'POST' })
+            bookFetch('/api/posts/' + postId + '/like', { method: 'POST' })
                 .then(r => r.json())
                 .then(data => {
                     if ('liked' in data) {
@@ -1023,7 +1025,7 @@
             const text = input.value.trim();
             if (!text) return;
 
-            fetch('/api/posts/' + postId + '/comment', {
+            bookFetch('/api/posts/' + postId + '/comment', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({text: text})

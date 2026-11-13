@@ -109,14 +109,14 @@ def error_response(status, *, title=None, detail=None, workspace_url="", service
     return response
 
 
-def dashboard(user, services, *, private=False):
+def dashboard(user, services, *, private=False, token=""):
     if private and not user:
         services = {}
     if user:
         account = f"""<div class="account">
   <a class="username" href="/account/email">{safe(user["username"])}</a>
   {'<a class="button primary" href="/admin">Admin</a>' if user["is_admin"] else ''}
-  <form action="/logout" method="post"><button class="button" type="submit">Sign out</button></form>
+  <form action="/logout" method="post"><input type="hidden" name="csrf" value="{safe(token)}"><button class="button" type="submit">Sign out</button></form>
 </div>"""
     else:
         account = """<div class="account">
@@ -163,18 +163,17 @@ def nav_link(label, url, current):
 
 
 def auth_page(mode, error=None, service=None, target="/", *, private=False,
-              min_password_length=8, fields=None):
+              min_password_length=8, fields=None, token="", state=""):
     fields = fields or {}
     signup = mode == "signup"
     title = "Create your account" if signup else "Sign in"
     other = "login" if signup else "signup"
-    other_url = f"/{other}?" + urlencode({"service": service or "", "path": target})
+    other_url = f"/{other}?" + urlencode({"service": service or "", "path": target, "state": state})
     password_type = "new-password" if signup else "current-password"
     confirmation = f"""
 <label for="confirmation">Confirm password</label>
 <input id="confirmation" name="password_confirmation" type="password"
-       autocomplete="new-password" minlength="{min_password_length}" maxlength="255"
-       value="{safe(fields.get('password_confirmation', ''))}" required>""" if signup else ""
+       autocomplete="new-password" minlength="{min_password_length}" maxlength="255" required>""" if signup else ""
     email = f"""
 <label for="email">Email address</label>
 <input id="email" name="email" type="email" autocomplete="email" maxlength="254"
@@ -192,6 +191,8 @@ def auth_page(mode, error=None, service=None, target="/", *, private=False,
     {approval_note}
     {alert}
     <form method="post" action="/{mode}">
+      <input type="hidden" name="csrf" value="{safe(token)}">
+      <input type="hidden" name="state" value="{safe(state)}">
       <input type="hidden" name="service" value="{safe(service or '')}">
       <input type="hidden" name="path" value="{safe(target)}">
       <label for="username">{'Username' if signup else 'Username or email'}</label>
@@ -199,8 +200,7 @@ def auth_page(mode, error=None, service=None, target="/", *, private=False,
              value="{safe(fields.get('username', ''))}" required>
       {email}
       <label for="password">Password</label>
-      <input id="password" name="password" type="password" autocomplete="{password_type}" {password_limits}
-             value="{safe(fields.get('password', ''))}" required>
+      <input id="password" name="password" type="password" autocomplete="{password_type}" {password_limits} required>
       {confirmation}
       <button class="button primary" type="submit">{title}</button>
     </form>
@@ -299,12 +299,13 @@ def password_page(token, message="", *, min_password_length=8):
 
 
 
-def reset_request_page(submitted):
+def reset_request_page(submitted, token):
     if submitted:
         content = "<p>If this account exists, its reset request is now visible to a DodoStack administrator.</p>"
     else:
-        content = """
+        content = f"""
 <form action="/forgot-password" method="post">
+  <input type="hidden" name="csrf" value="{safe(token)}">
   <label for="username">DodoStack username</label>
   <input id="username" name="username" autocomplete="username" maxlength="24" required>
   <button class="button primary" type="submit">Request reset</button>
@@ -338,12 +339,12 @@ def email_page(token, current_email, message=""):
       <button class="button primary" type="submit">Save email</button>
     </form>
     {('<p><a href="/account/password">Change password</a></p>' if current_email else '')}
-    <form method="post" action="/logout"><button class="button" type="submit">Sign out</button></form>
+    <form method="post" action="/logout"><input type="hidden" name="csrf" value="{safe(token)}"><button class="button" type="submit">Sign out</button></form>
   </section>
 </main>""")
 
 
-def pending_page():
+def pending_page(token):
     return document("Approval pending", f"""
 {header()}
 <main class="workspace">
@@ -351,6 +352,6 @@ def pending_page():
     <h1>Approval pending</h1>
     <p>A DodoStack administrator needs to approve your account before you can open the services.</p>
     <a class="button primary" href="/account/pending">Check approval status</a>
-    <form method="post" action="/logout"><button class="button" type="submit">Sign out</button></form>
+    <form method="post" action="/logout"><input type="hidden" name="csrf" value="{safe(token)}"><button class="button" type="submit">Sign out</button></form>
   </section>
 </main>""")

@@ -99,6 +99,7 @@
         </div>
     </main>
 
+    {% include "_csrf_fetch.html" %}
     <script>
         let searchTimer = null;
 
@@ -110,7 +111,7 @@
                 return;
             }
             searchTimer = setTimeout(() => {
-                fetch('/api/friends/search?q=' + encodeURIComponent(q.trim()))
+                bookFetch('/api/friends/search?q=' + encodeURIComponent(q.trim()))
                     .then(r => r.json())
                     .then(data => {
                         results.innerHTML = '';
@@ -151,7 +152,7 @@
 
         function cancelRequest(friendshipId, btn) {
             btn.disabled = true;
-            fetch('/api/friends/cancel/' + friendshipId, { method: 'DELETE' })
+            bookFetch('/api/friends/cancel/' + friendshipId, { method: 'DELETE' })
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
@@ -165,7 +166,7 @@
 
         function cancelSentRequest(friendshipId, btn) {
             btn.disabled = true;
-            fetch('/api/friends/cancel/' + friendshipId, { method: 'DELETE' })
+            bookFetch('/api/friends/cancel/' + friendshipId, { method: 'DELETE' })
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
@@ -179,7 +180,7 @@
 
         function sendRequest(userId, btn) {
             btn.disabled = true;
-            fetch('/api/friends/request', {
+            bookFetch('/api/friends/request', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({user_id: userId})
@@ -196,7 +197,7 @@
         }
 
         function respondRequest(friendshipId, action, btn) {
-            fetch('/api/friends/respond', {
+            bookFetch('/api/friends/respond', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({friendship_id: friendshipId, action: action})

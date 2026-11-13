@@ -58,6 +58,23 @@ Configure DNS or the client device's hosts file so that the service domain and i
 
 For `dodoai`, point those service names under `dodoai` to the Pi's Tailscale IP. The workspace name resolving on Tailscale does not itself create DNS records for its service names. DodoKey's browser encryption requires a secure context such as localhost or HTTPS.
 
+### Direct HTTPS on port 8000
+
+Keep `DODO_HTTPS=false` for HTTP. To serve HTTPS directly, obtain a certificate covering your workspace and all service hostnames, then set the following in the root `.env` on the server:
+
+```dotenv
+DODO_HOST=0.0.0.0
+DODO_PORT=8000
+DODO_WORKSPACE_HOSTS=dodoai.duckdns.org
+DODO_HTTPS=true
+DODO_TLS_CERT_FILE=/path/to/fullchain.pem
+DODO_TLS_KEY_FILE=/path/to/privkey.pem
+```
+
+For DuckDNS, a certificate for both `dodoai.duckdns.org` and `*.dodoai.duckdns.org` covers the workspace and its services. Use an ACME client with DuckDNS DNS-01 validation. Keep its token and the private key outside the checkout and grant the DodoStack process read access to the certificate and key. Restart DodoStack after renewing the certificate. To reach it from the internet, point the names to the public address and forward TCP port 8000 to the server. Open `https://dodoai.duckdns.org:8000`. Register any additional hostnames only if the certificate covers them. A browser that has cached HSTS may continue to require HTTPS for up to a day after switching the same hostname back to HTTP.
+
+Direct TLS encrypts the connection. The bundled listener uses Python's `http.server`, which Python advises against exposing in production. It has connection limits and timeouts, and can still be exhausted by untrusted traffic. Keep HTTP deployments on a trusted network.
+
 ## DodoKey password vault
 
 Open DodoKey from **Your services** and set a separate vault password of at least 12 characters. Add, edit, generate, copy, and delete saved logins from the vault. Your browser encrypts the vault before saving it to DodoStack and locks it after five minutes of inactivity. Keep your vault password safe because resetting your DodoStack account password cannot recover the vault.

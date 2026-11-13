@@ -39,6 +39,7 @@
             <h2>DodoBook roles</h2>
             {% for user in users if user.id != current_user.id %}
             <form class="role-form" action="{{ url_for('admin_set_role', user_id=user.id) }}" method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <label for="role-{{ user.id }}">{{ user.username }}</label>
                 <select id="role-{{ user.id }}" name="role">
                     {% for value, label in [('user', 'Member'), ('moderator', 'Moderator'), ('admin', 'Administrator')] %}
@@ -74,12 +75,13 @@
             {% endfor %}
         </section>
     </main>
+    {% include "_csrf_fetch.html" %}
     <script>
         const feedback = document.getElementById('feedback');
 
         async function updateBoard(url, options) {
             try {
-                const response = await fetch(url, options);
+                const response = await bookFetch(url, options);
                 const data = await response.json();
                 if (response.ok && data.success) return true;
                 feedback.textContent = data.message || 'The change could not be saved.';
