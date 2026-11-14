@@ -14,9 +14,11 @@ from zoneinfo import ZoneInfo
 from holidays import country_holidays, list_supported_countries
 
 from dodo.web import (
-    WebApplication, abort, admin_only, current_user, redirect, render_template,
+    WebApplication, abort, admin_only, current_user, flash, redirect, render_template,
     request, require_login, url_for, verify_form_token,
 )
+
+from subsites.dodomail.delivery import deliver
 
 app = WebApplication(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024
@@ -31,12 +33,14 @@ MONTHS = ("January", "February", "March", "April", "May", "June", "July",
 
 
 @contextmanager
-def calendar_database():
+def calendar_database(*, accounts=None):
     DATABASE.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(DATABASE)
     db.row_factory = sqlite3.Row
     try:
         db.execute("PRAGMA foreign_keys = ON")
+        if accounts is not None:
+            db.execute("ATTACH DATABASE ? AS mail_store", (str(accounts.path),))
         with db:
             if db.execute("PRAGMA user_version").fetchone()[0] < 2:
                 db.execute("BEGIN IMMEDIATE")
@@ -294,19 +298,42 @@ def event_details(event_id):
 def manage_event(event_id):
     verify_form_token()
     action = request.form.get("action")
-    with calendar_database() as db:
+    accounts = request.identity.accounts
+    with calendar_database(accounts=accounts if action in {"invite", "delete"} else None) as db:
         if action == "leave":
             if not 0 < event_id < 2**63:
                 abort(404)
             db.execute("DELETE FROM event_members WHERE event_id=? AND account_id=?", (event_id, current_user.id))
             return redirect(url_for("calendar_view"), 303)
+        if action in {"invite", "delete"}:
+            db.execute("BEGIN IMMEDIATE")
         event = get_event(db, event_id, owned=True)
-        if action == "share":
+        if action == "invite":
+            recipient = request.form.get("recipient", "").strip().lower()
+            account = db.execute("""SELECT id FROM mail_store.users WHERE approved=1
+                AND (username=? OR dmail_address=?)""", (recipient, recipient)).fetchone()
+            if not account or account["id"] == current_user.id:
+                flash("Enter another active DodoStack user's username or DodoMail address.", "error")
+            elif db.execute("SELECT 1 FROM event_members WHERE account_id=? AND event_id=?",
+                            (account["id"], event_id)).fetchone():
+                flash("This user already has the event on their calendar.")
+            else:
+                clock = event["event_time"] or "All day"
+                details = (f"{current_user.username} invited you to {event['title']}.\n"
+                           f"{event['event_date']} · {clock}\n{REPEAT[event['repeat']]}").strip()
+                if event["notes"]:
+                    details += "\n\n" + event["notes"]
+                sent = deliver(request, account["id"], "Calendar invitation: " + event["title"], details,
+                               calendar_transaction=db, event_id=event_id)
+                flash("Invitation sent." if sent else "This user already has a pending invitation.")
+        elif action == "share":
             db.execute("UPDATE events SET share_token=? WHERE id=? AND owner_id=? AND share_token IS NULL",
                        (secrets.token_urlsafe(32), event_id, current_user.id))
         elif action == "disable_link":
             db.execute("UPDATE events SET share_token=NULL WHERE id=? AND owner_id=?", (event_id, current_user.id))
         elif action == "delete":
+            db.execute("""UPDATE mail_store.mail_messages SET invitation_status='cancelled'
+                WHERE event_id=? AND invitation_status='pending'""", (event_id,))
             db.execute("DELETE FROM events WHERE id=? AND owner_id=?", (event_id, current_user.id))
             return redirect(url_for("calendar_view", day=event["event_date"]), 303)
         else:

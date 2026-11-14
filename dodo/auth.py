@@ -1,6 +1,7 @@
 """Shared account store and short-lived, audience-scoped service sessions."""
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from urllib.parse import quote, urlencode
 import base64
@@ -13,8 +14,11 @@ import secrets
 import sqlite3
 from threading import Lock
 import time
+import unicodedata
 
 from email_validator import EmailNotValidError, validate_email
+
+from subsites.dodomail.delivery import initialize as initialize_mail, welcome
 
 from .framework import Request, Response, cookie_name, redirect
 from . import pages
@@ -61,6 +65,29 @@ def normalized_email(value: str) -> str:
         raise ValueError("Enter a valid email address.") from error
 
 
+DMAIL_LOCAL = r"[a-z0-9]+(?:[._-][a-z0-9]+)*"
+
+
+def clean_name(value):
+    name = " ".join(value.split())
+    if len(name) > 60 or not any(char.isalpha() for char in name):
+        raise ValueError("Enter both your first name and last name (up to 60 characters each).")
+    return name
+
+
+def name_local_part(first_name, last_name):
+    parts = []
+    for name in (first_name, last_name):
+        ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+        part = re.sub(r"[^a-z0-9]+", ".", ascii_name.lower()).strip(".")[:24].rstrip(".")
+        parts.append(part or "user")
+    return ".".join(parts)
+
+
+class DmailAddressTaken(ValueError):
+    pass
+
+
 class AccountStore:
     def __init__(self, database: str | Path, secret: str, *, min_password_length=8):
         self.path = Path(database)
@@ -78,6 +105,9 @@ class AccountStore:
                 session_version INTEGER NOT NULL,
                 is_admin INTEGER NOT NULL DEFAULT 0,
                 email TEXT NOT NULL,
+                birth_date TEXT NOT NULL,
+                real_name TEXT NOT NULL,
+                dmail_address TEXT NOT NULL COLLATE NOCASE UNIQUE,
                 approved INTEGER NOT NULL DEFAULT 1,
                 password_reset_requested INTEGER NOT NULL DEFAULT 0,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
@@ -85,6 +115,8 @@ class AccountStore:
             db.execute("""CREATE TABLE IF NOT EXISTS redeemed_tickets (
                 nonce TEXT PRIMARY KEY, expires INTEGER NOT NULL
             )""")
+
+            initialize_mail(db)
 
     def redeem_ticket(self, nonce, expires):
         with self.connect() as db:
@@ -95,6 +127,7 @@ class AccountStore:
     def connect(self):
         db = sqlite3.connect(self.path)
         db.row_factory = sqlite3.Row
+        db.execute("PRAGMA foreign_keys = ON")
         return db
 
     @staticmethod
@@ -123,7 +156,9 @@ class AccountStore:
     def authenticate(self, identifier: str, password: str):
         if len(identifier) > 254 or not 1 <= len(password) <= 255:
             return None
-        if "@" in identifier:
+        if identifier.lower().endswith("@dmail"):
+            lookup = "dmail_address=?"
+        elif "@" in identifier:
             try:
                 identifier = normalized_email(identifier)
             except ValueError:
@@ -212,14 +247,39 @@ class AccountStore:
         with self.connect() as db:
             db.execute("UPDATE users SET approved=1 WHERE username=?", (username,))
 
-    def register(self, username: str, password: str, email: str, *, approved: bool):
+    def suggest_dmail(self, first_name, last_name):
+        base = name_local_part(clean_name(first_name), clean_name(last_name))
+        with self.connect() as db:
+            candidate, number = base, 2
+            while db.execute("SELECT 1 FROM users WHERE dmail_address=?", (candidate + "@dmail",)).fetchone():
+                candidate = f"{base}{number}"
+                number += 1
+        return candidate
+
+    def register(self, username, password, email, *, birth_date, first_name, last_name, dmail_local, approved):
         self.validate_password(password)
         email = normalized_email(email)
+        real_name = f"{clean_name(first_name)} {clean_name(last_name)}"
+        try:
+            if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", birth_date) or date.fromisoformat(birth_date) > date.today():
+                raise ValueError
+        except ValueError:
+            raise ValueError("Enter a valid date of birth.") from None
+        local = dmail_local.strip().lower()
+        if not 1 <= len(local) <= 64 or not re.fullmatch(DMAIL_LOCAL, local):
+            raise ValueError("Use up to 64 letters (a–z) or digits, separated by dots, underscores or hyphens.")
+        address = local + "@dmail"
+        password_hash = self.hash_password(password)
         with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if db.execute("SELECT 1 FROM users WHERE dmail_address=?", (address,)).fetchone():
+                raise DmailAddressTaken
             cursor = db.execute(
-                "INSERT INTO users(username,password_hash,email,approved,session_version) VALUES (?,?,?,?,?)",
-                (username, self.hash_password(password), email, approved, secrets.randbits(52)),
+                """INSERT INTO users(username,password_hash,email,birth_date,real_name,dmail_address,
+                    approved,session_version) VALUES (?,?,?,?,?,?,?,?)""",
+                (username, password_hash, email, birth_date, real_name, address, approved, secrets.randbits(52)),
             )
+            welcome(db, cursor.lastrowid)
             return {"id": cursor.lastrowid, "username": username, "email": email, "approved": approved}
 
     def issue(self, payload: dict) -> str:
@@ -400,12 +460,14 @@ class Identity:
     def handle_main(self, request: Request, *, api=False):
         user = self.main_user(request)
         path = request.path
+        if path in {"/signup", "/login"} and request.method not in {"GET", "HEAD", "POST"}:
+            return Response(b"", 405, {"Allow": "GET, HEAD, POST"})
         if path == "/logout" and request.method != "POST":
             response = Response.text("Sign out using the workspace form.", 405)
             response.headers["Allow"] = "POST"
             return response
         token = ""
-        if path in {"/login", "/signup", "/forgot-password", "/logout", "/auth/authorize"}:
+        if path in {"/login", "/signup", "/forgot-password", "/logout", "/auth/authorize", "/signup/address"}:
             token = self.form_token(request)
             if request.method == "POST" and not self.valid_form(request, token):
                 log.debug("Rejected workspace form with an invalid security token")
@@ -434,6 +496,18 @@ class Identity:
             if user:
                 return self._issue_ticket(service, user, target, state)
             return self.auth_form("login", service, target, token=token, state=state)
+        if path == "/signup/address":
+            if request.method != "POST":
+                return Response(b"", 405, {"Allow": "POST"})
+            try:
+                suggestion = self.accounts.suggest_dmail(
+                    request.form.get("first_name", [""])[0], request.form.get("last_name", [""])[0],
+                )
+            except ValueError as error:
+                return Response.text(str(error), 400)
+            response = Response.text(suggestion)
+            response.headers["Cache-Control"] = "no-store"
+            return response
         if path == "/forgot-password":
             submitted = request.method == "POST"
             if submitted:
@@ -447,7 +521,7 @@ class Identity:
             state = request.value("state")
             if request.method == "POST":
                 fields = {key: request.form.get(key, [""])[0] for key in
-                          ("username", "email", "password", "password_confirmation")}
+                          ("username", "email", "password", "password_confirmation", "birth_date", "first_name", "last_name", "dmail_local")}
                 username, password = fields["username"].strip(), fields["password"]
                 if mode == "signup":
                     confirmation = fields["password_confirmation"]
@@ -459,8 +533,14 @@ class Identity:
                         try:
                             user = self.accounts.register(
                                 username, password, fields["email"], approved=not self.private,
+                                birth_date=fields["birth_date"], first_name=fields["first_name"],
+                                last_name=fields["last_name"],
+                                dmail_local=fields["dmail_local"],
                             )
                             error = None
+                        except DmailAddressTaken:
+                            fields["dmail_local"] = self.accounts.suggest_dmail(fields["first_name"], fields["last_name"])
+                            error = "That DodoMail address is in use. Review the available address below and submit again."
                         except ValueError as exc:
                             error = str(exc)
                         except sqlite3.IntegrityError:
@@ -468,7 +548,7 @@ class Identity:
                 else:
                     authenticated = self.accounts.authenticate(username, password)
                     user = self.accounts.account(authenticated["id"]) if authenticated else None
-                    error = None if user else "The username, email or password is incorrect."
+                    error = None if user else "The sign-in details are incorrect."
                 if not error:
                     log.debug("Shared account %s accepted", mode)
                     version = self.accounts.session_version(user["id"])

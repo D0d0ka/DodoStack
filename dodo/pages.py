@@ -7,7 +7,8 @@ from .diagnostics import request_id
 from .framework import Response, safe
 
 SERVICE_DESCRIPTIONS = {
-    "todo": "Capture tasks, see what’s left, and mark off what’s done.",
+    "dodomail": "Read DodoStack mail, service updates, and calendar invitations.",
+    "todo": "Plan tasks with projects, priorities, labels, and recurring dates.",
     "doodle": "Search the web, media, and indexed sites.",
     "dodobook": "Share posts and chat with friends and groups.",
     "dodotv": "Browse the catalog and keep track of what you watch.",
@@ -15,8 +16,9 @@ SERVICE_DESCRIPTIONS = {
     "dodocalender": "Plan personal events, see public holidays, and share events.",
 }
 SERVICE_NAMES = {
+    "dodomail": "DodoMail",
     "doodle": "Doodle", "dodobook": "DodoBook", "dodotv": "Dodo TV",
-    "todo": "Todo", "dodokey": "DodoKey", "dodocalender": "Dodo Calender",
+    "todo": "DodoTodo", "dodokey": "DodoKey", "dodocalender": "Dodo Calender",
 }
 
 
@@ -186,6 +188,25 @@ def auth_page(mode, error=None, service=None, target="/", *, private=False,
 <label for="email">Email address</label>
 <input id="email" name="email" type="email" autocomplete="email" maxlength="254"
        value="{safe(fields.get('email', ''))}" required>""" if signup else ""
+    address_ready = all(fields.get(key, "").strip() for key in ("first_name", "last_name", "dmail_local"))
+    profile = f"""
+<label for="first-name">First name</label>
+<input id="first-name" name="first_name" autocomplete="given-name" maxlength="60"
+       value="{safe(fields.get('first_name', ''))}" required>
+<label for="last-name">Last name</label>
+<input id="last-name" name="last_name" autocomplete="family-name" maxlength="60"
+       value="{safe(fields.get('last_name', ''))}" required>
+<label for="dmail-local">DodoMail address</label>
+<div class="dmail-address">
+  <input id="dmail-local" name="dmail_local" autocomplete="off" autocapitalize="none" spellcheck="false"
+         pattern="[A-Za-z0-9]+(?:[._\\-][A-Za-z0-9]+)*" maxlength="64" aria-describedby="dmail-domain"
+         value="{safe(fields.get('dmail_local', ''))}" {'readonly' if not address_ready else ''} required>
+  <span id="dmail-domain">@dmail</span>
+</div>
+<label for="birth-date">Date of birth</label>
+<input id="birth-date" name="birth_date" type="date" autocomplete="bday"
+       value="{safe(fields.get('birth_date', ''))}" required>""" if signup else ""
+    signup_script = '<script src="/static/signup.js" defer></script>' if signup else ""
     password_limits = f'minlength="{min_password_length}" maxlength="255"' if signup else 'maxlength="255"'
     approval_note = '<p>New accounts need approval from a DodoStack administrator.</p>' if signup and private else ""
     alert = f'<p class="error" role="alert">{safe(error)}</p>' if error else ""
@@ -203,10 +224,11 @@ def auth_page(mode, error=None, service=None, target="/", *, private=False,
       <input type="hidden" name="state" value="{safe(state)}">
       <input type="hidden" name="service" value="{safe(service or '')}">
       <input type="hidden" name="path" value="{safe(target)}">
-      <label for="username">{'Username' if signup else 'Username or email'}</label>
+      <label for="username">{'Username' if signup else 'Username, email address or DodoMail address'}</label>
       <input id="username" name="username" autocomplete="username" {'minlength="3" maxlength="24"' if signup else 'maxlength="254"'}
              value="{safe(fields.get('username', ''))}" required>
       {email}
+      {profile}
       <label for="password">Password</label>
       <input id="password" name="password" type="password" autocomplete="{password_type}" {password_limits} required>
       {confirmation}
@@ -217,7 +239,7 @@ def auth_page(mode, error=None, service=None, target="/", *, private=False,
     </p>
     {'' if signup else '<p><a href="/forgot-password">Request a password reset</a></p>'}
   </section>
-</main>""")
+</main>{signup_script}""")
 
 
 def sign_in_problem(service, message, service_url, origin):

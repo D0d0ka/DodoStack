@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d172a">
+  <title>{{ message.subject if message else folders[folder] }} · DodoMail</title>
+  <link rel="icon" href="{{ url_for('logo') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='mail.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('inbox') }}"><img src="{{ url_for('logo') }}" alt="" width="40" height="40">DodoMail</a>
+    <a class="workspace" href="{{ workspace_url }}">DodoStack workspace</a>
+  </header>
+  <main class="layout">
+    <aside>
+      <p class="address">{{ address }}</p>
+      <nav aria-label="Mail folders">
+        {% for key, label in folders.items() %}
+          <a href="{{ url_for('inbox', folder=key) }}"{% if key == folder %} aria-current="page"{% endif %}>
+            {{ label }}{% if key == 'inbox' and unread %}<span>{{ unread }} unread</span>{% endif %}
+          </a>
+        {% endfor %}
+      </nav>
+    </aside>
+    <section class="mail">
+      {% if message %}
+        <a class="back" href="{{ url_for('inbox', folder=folder) }}">← {{ folders[folder] }}</a>
+        <article>
+          <h1>{{ message.subject }}</h1>
+          <div class="metadata"><strong>{{ sender_name(message.sender) if message.sender != 'stack' else 'DodoStack' }}</strong>
+            <time datetime="{{ message.created_at|replace(' ', 'T') }}Z">{{ message.created_at }} UTC</time></div>
+          <p class="body">{{ message.body }}</p>
+          {% if message.invitation_status %}
+            <section class="invitation" aria-label="Calendar invitation">
+              {% if message.invitation_status == 'pending' %}
+                <form method="post">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="primary" name="action" value="accept">Accept invitation</button>
+                  <button name="action" value="decline">Decline</button>
+                </form>
+              {% else %}
+                <p>Invitation {{ message.invitation_status }}.</p>
+                {% if message.invitation_status == 'accepted' %}<a href="{{ calendar_url }}">Open calendar</a>{% endif %}
+              {% endif %}
+            </section>
+          {% endif %}
+        </article>
+        <form class="actions" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% if message.is_read %}<button name="action" value="unread">Mark unread</button>
+          {% else %}<button name="action" value="read">Mark read</button>{% endif %}
+          {% if folder == 'inbox' %}<button name="action" value="archive">Archive</button>
+          {% else %}<button name="action" value="inbox">Move to inbox</button>{% endif %}
+          {% if folder != 'trash' %}<button name="action" value="trash">Move to trash</button>{% endif %}
+        </form>
+      {% else %}
+        <h1>{{ folders[folder] }}</h1>
+        {% if messages %}
+          <ul class="messages">
+            {% for row in messages %}
+              <li><a class="{{ 'read' if row.is_read else 'unread' }}" href="{{ url_for('message_view', message_id=row.id) }}">
+                <span class="sender">{{ sender_name(row.sender) if row.sender != 'stack' else 'DodoStack' }}</span>
+                <span class="subject">{% if not row.is_read %}<span class="sr-only">Unread: </span>{% endif %}{{ row.subject }}</span>
+                <time datetime="{{ row.created_at|replace(' ', 'T') }}Z">{{ row.created_at[:10] }}</time>
+              </a></li>
+            {% endfor %}
+          </ul>
+        {% else %}<p class="empty">No messages in {{ folders[folder]|lower }}.</p>{% endif %}
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

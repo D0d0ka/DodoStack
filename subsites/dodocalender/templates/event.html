@@ -20,6 +20,17 @@
       {% if share_url %}<button name="action" value="disable_link">Disable link</button>
       {% else %}<button class="primary" name="action" value="share">Create share link</button>{% endif %}
     </form>
+    <h3>Invite a participant</h3>
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+      <p class="{{ category }}" role="status">{{ message }}</p>
+    {% endfor %}
+    <form method="post" action="{{ url_for('manage_event', event_id=event.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Username or DodoMail address
+        <input name="recipient" maxlength="70" required autocomplete="off">
+      </label>
+      <button class="primary" name="action" value="invite">Send invitation</button>
+    </form>
     <h3>Shared with</h3>
     {% if people %}
       <ul class="people">{% for person in people %}<li>{{ person }}</li>{% endfor %}</ul>

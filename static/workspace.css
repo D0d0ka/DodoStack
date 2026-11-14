@@ -120,3 +120,16 @@ a.service-card:hover { border-color: #779665; }
   border-radius: 13px;
   background: #edf2df;
 }
+
+.dmail-address {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+}
+
+.dmail-address input { min-width: 0; }
+
+.dmail-address input:read-only {
+    opacity: .65;
+    cursor: default;
+}

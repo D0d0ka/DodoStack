@@ -121,7 +121,11 @@ class Application:
         target = (self.static_dir / relative).resolve()
         if self.static_dir not in target.parents or not target.is_file():
             return Response.text("Not found", 404)
-        kind = "text/css; charset=utf-8" if target.suffix == ".css" else "image/png" if target.suffix == ".png" else "application/octet-stream"
+        kind = {
+            ".css": "text/css; charset=utf-8",
+            ".js": "text/javascript; charset=utf-8",
+            ".png": "image/png",
+        }.get(target.suffix.lower(), "application/octet-stream")
         return Response(target.read_bytes(), 200, {"Content-Type": kind})
 
     def dispatch(self, request: Request, *, auth=None) -> Response:

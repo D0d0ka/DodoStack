@@ -22,13 +22,14 @@ python server.py
 | Dodo TV | [dodotv.localhost:8000](http://dodotv.localhost:8000) |
 | DodoKey | [dodokey.localhost:8000](http://dodokey.localhost:8000) |
 | Dodo Calender | [dodocalender.localhost:8000](http://dodocalender.localhost:8000) |
+| DodoMail | [dodomail.localhost:8000](http://dodomail.localhost:8000) |
 | Administration | [localhost:8000/admin](http://localhost:8000/admin) |
 
 Dodo TV uses FFmpeg and FFprobe for video uploads, validation, and preview frames. Doodle's optional AI answers require a local Ollama instance. Set `DODO_PORT` to change the port.
 
 ## Sign-in and server settings
 
-All services require a DodoStack account. Sign in with your username or email address. The root `.env` configures DodoStack. Copy `.env.example` if needed, and restart after changing settings.
+All services require a DodoStack account. Sign in with your username, email address, or DodoMail address. The root `.env` configures DodoStack. Copy `.env.example` if needed, and restart after changing settings.
 
 - `DODO_MIN_PASSWORD_LENGTH` sets the minimum length for new and changed passwords. The default is 8.
 - `DODO_PRIVATE=true` requires workspace approval for new accounts. Approve them in **Admin → Accounts**.
@@ -53,7 +54,7 @@ Restart with `.venv/bin/python server.py`. In this example, the workspace opens 
 Configure DNS or the client device's hosts file so that the service domain and its service subdomains resolve to the server. For example, on the LAN you can add this hosts-file entry:
 
 ```text
-192.168.0.11 dodostack.home.arpa todo.dodostack.home.arpa doodle.dodostack.home.arpa dodobook.dodostack.home.arpa dodotv.dodostack.home.arpa dodokey.dodostack.home.arpa dodocalender.dodostack.home.arpa
+192.168.0.11 dodostack.home.arpa todo.dodostack.home.arpa doodle.dodostack.home.arpa dodobook.dodostack.home.arpa dodotv.dodostack.home.arpa dodokey.dodostack.home.arpa dodocalender.dodostack.home.arpa dodomail.dodostack.home.arpa
 ```
 
 For `dodoai`, point those service names under `dodoai` to the Pi's Tailscale IP. The workspace name resolving on Tailscale does not itself create DNS records for its service names. DodoKey's browser encryption requires a secure context such as localhost or HTTPS.
@@ -88,7 +89,7 @@ DODO_WORKSPACE_HOSTS=https://example.trycloudflare.com
 
 The `https://` prefix selects HTTPS for public URLs, origin checks and secure cookies for that workspace. Quick Tunnel hostnames also select HTTPS automatically when entered without the prefix. Other entries without a scheme continue to use `DODO_HTTPS`. When `cloudflared` prints a new Quick Tunnel address, replace the old entry and restart DodoStack while leaving the current tunnel running. Open a fresh sign-in page to receive cookies for the current host.
 
-A Quick Tunnel has one temporary hostname, so it exposes the workspace and workspace admin routes. The service cards show descriptions there. For clickable service cards and all six services, use a named tunnel with a domain you control, register `https://your-domain`, and route that domain and each service hostname to the same local HTTP listener.
+A Quick Tunnel has one temporary hostname, so it exposes the workspace and workspace admin routes. The service cards show descriptions there. For clickable service cards and all registered services, use a named tunnel with a domain you control, register `https://your-domain`, and route that domain and each service hostname to the same local HTTP listener.
 
 ## DodoKey password vault
 
@@ -96,27 +97,35 @@ Open DodoKey from **Your services** and set a separate vault password of at leas
 
 ## Administrators
 
-Register a shared account in the workspace. Grant the first account administrator access from the terminal.
+After a database reset, start the workspace with `.venv/bin/python server.py` and select **Create account**. Enter your username, password, date of birth, first name, last name, email address and DodoMail address. Then grant the first account administrator access from a separate terminal in the repo root. This also approves the account in private mode. Sign in again or reload the workspace to open **Admin**.
 
 ```bash
-python server.py set-admin YOUR_USERNAME
+.venv/bin/python server.py set-admin YOUR_USERNAME
 ```
 
 The workspace **Admin** tabs manage shared accounts, Doodle, DodoBook, and Dodo TV. In DodoBook, open **Moderation** from the user menu. DodoBook administrators can manage other members' DodoBook roles and delete posts and comments. Moderators can delete posts and comments they can see. DodoBook roles apply within DodoBook. DodoBook uses the shared email address and keeps its username, bio, and picture in the service profile.
 
 ## Local databases
 
-DodoStack creates databases from the current schema. The shared account, DodoBook, Doodle, and Dodo TV databases are initialized on startup. Todo and DodoKey initialize their databases on first use.
+DodoStack creates databases from the current schema. The shared account, DodoBook, Doodle, and Dodo TV databases are initialized on startup. Todo, DodoKey, and Dodo Calender initialize their databases on first use. DodoMail shares the account database so registration and delivery of the welcome message commit together.
+
+To reset local data, stop the server and remove the application databases listed below along with any matching SQLite `-wal`, `-shm`, or `-journal` files. Check for a configured local Dodo TV database path if you set `DATABASE_URL`. Preserve `.env`, `instance/server.key`, the Dodo TV signing key, and other configuration. Restart the server and follow the first-account steps above.
 
 | Database | Path relative to the project root |
 | --- | --- |
-| Shared accounts | `instance/accounts.sqlite3` |
+| Shared accounts and DodoMail | `instance/accounts.sqlite3` |
 | Todo | `subsites/todo/instance/todos.sqlite3` |
 | Doodle | `subsites/doodle/doodle.db` |
 | DodoBook | `subsites/dodobook/instance/dodobook.db` |
 | Dodo TV | `subsites/DodoTV/instance/dodotv.db` |
 | DodoKey | `subsites/dodokey/instance/vaults.sqlite3` |
 | Dodo Calender | `subsites/dodocalender/instance/calendar.sqlite3` |
+
+## DodoMail and calendar invitations
+
+DodoMail receives plain-text updates from DodoStack services. To deliver mail from an authenticated `WebApplication` handler, call `subsites.dodomail.delivery.deliver(request, recipient_id, subject, body)`. The sender comes from the server's service routing context and is authenticated with the shared service assertion. The delivery function accepts the DodoStack account ID of an approved recipient.
+
+To invite someone, open an event you own in Dodo Calender and enter their username or DodoMail address under **Sharing**. They can accept or decline from their inbox. Accepted events appear in their calendar alongside events added through sharing links.
 
 ## Add a service and admin tab
 

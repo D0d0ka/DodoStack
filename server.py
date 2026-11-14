@@ -60,12 +60,14 @@ SERVICE_MODULES = {
     "dodotv": "subsites.DodoTV.run",
     "dodokey": "subsites.dodokey.app",
     "dodocalender": "subsites.dodocalender.app",
+    "dodomail": "subsites.dodomail.app",
 }
 workspace = Application("workspace", static_dir=BASE_DIR / "static")
 
 
 BRAND_FILES = {
     "stack": BASE_DIR / "assets/server-icon.png",
+    "dodomail": BASE_DIR / "assets/dodomail.png",
     "todo": BASE_DIR / "subsites/todo/static/images/dodo_sign.png",
     "doodle": BASE_DIR / "subsites/doodle/templates/dodo.png",
     "dodobook": BASE_DIR / "subsites/dodobook/static/dodobook.png",
@@ -359,7 +361,7 @@ class DodoHandler(BaseHTTPRequestHandler):
         request.secure = identity.secure
         if main:
             known_path = request.path in {"/", "/login", "/signup", "/logout", "/forgot-password",
-                                          "/auth/authorize", "/account/pending", "/account/password",
+                                          "/auth/authorize", "/signup/address", "/account/pending", "/account/password",
                                           "/account/email", "/admin", "/admin/role", "/admin/password",
                                           "/admin/approve"}
             endpoint = "static" if request.path.startswith("/static/") else "<unmatched>"
