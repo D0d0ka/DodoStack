@@ -86,7 +86,9 @@ DODO_HTTPS=false
 DODO_WORKSPACE_HOSTS=https://example.trycloudflare.com
 ```
 
-The `https://` prefix selects HTTPS for public URLs, origin checks and secure cookies for that workspace. Other entries without a scheme continue to use `DODO_HTTPS`. A Quick Tunnel has one temporary hostname, so it exposes the workspace and workspace admin routes. The service cards show descriptions there. For clickable service cards and all six services, use a named tunnel with a domain you control, register `https://your-domain`, and route that domain and each service hostname to the same local HTTP listener.
+The `https://` prefix selects HTTPS for public URLs, origin checks and secure cookies for that workspace. Quick Tunnel hostnames also select HTTPS automatically when entered without the prefix. Other entries without a scheme continue to use `DODO_HTTPS`. When `cloudflared` prints a new Quick Tunnel address, replace the old entry and restart DodoStack while leaving the current tunnel running. Open a fresh sign-in page to receive cookies for the current host.
+
+A Quick Tunnel has one temporary hostname, so it exposes the workspace and workspace admin routes. The service cards show descriptions there. For clickable service cards and all six services, use a named tunnel with a domain you control, register `https://your-domain`, and route that domain and each service hostname to the same local HTTP listener.
 
 ## DodoKey password vault
 

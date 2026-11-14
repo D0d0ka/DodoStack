@@ -135,6 +135,8 @@ def host_routes(config):
             raise ValueError(f"Duplicate or reserved DodoStack workspace hostname: {host}")
         if domain.endswith(".trycloudflare.com") and host != domain:
             raise ValueError("A Quick Tunnel hostname must be configured as its own workspace.")
+        # Cloudflare always presents Quick Tunnel URLs to browsers over HTTPS.
+        public_https = public_https or host.endswith(".trycloudflare.com")
         default_port = 443 if public_https else PORT
         workspace_addresses[host] = (domain, int(port) if separator else default_port, HTTPS or public_https)
 
@@ -303,7 +305,8 @@ class DodoHandler(BaseHTTPRequestHandler):
         default_port = "443" if identity.secure else "80"
         origin_host = hostname if not host_port or host_port == default_port else f"{hostname}:{host_port}"
         if not same_origin(self.command, self.headers, f"{identity.scheme}://{origin_host}"):
-            return self.send_failure(403)
+            log.debug("Rejected browser request with a mismatched origin")
+            return self.send_failure(403, detail="This form must be submitted from the configured DodoStack address.")
         log.debug("Routed request service=%s content_length=%s", self.route_name, length)
         main = service is None
         if main and self.command == "POST" and target.path in {"/login", "/signup", "/forgot-password", "/account/password"}:

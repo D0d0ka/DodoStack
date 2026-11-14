@@ -408,7 +408,8 @@ class Identity:
         if path in {"/login", "/signup", "/forgot-password", "/logout", "/auth/authorize"}:
             token = self.form_token(request)
             if request.method == "POST" and not self.valid_form(request, token):
-                return Response.text("Invalid security token.", 403)
+                log.debug("Rejected workspace form with an invalid security token")
+                return Response.text("Invalid security token. Reload the form and try again.", 403)
         if user and path != "/logout":
             destination = self.account_destination(user)
             if destination and path != destination:
