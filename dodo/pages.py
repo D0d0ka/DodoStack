@@ -128,7 +128,7 @@ def dashboard(user, services, *, private=False, token=""):
         content = f"""
   {brand_logo(service)}
   <div><h3>{name}</h3><p>{safe(SERVICE_DESCRIPTIONS.get(service, 'Open this service with your Dodo account.'))}</p></div>"""
-        if user:
+        if user and url:
             cards.append(f"""<a class="service-card" href="{safe(url)}">{content}
   <span class="arrow" aria-hidden="true">→</span>
 </a>""")
@@ -137,9 +137,12 @@ def dashboard(user, services, *, private=False, token=""):
 
     service_list = ""
     if cards:
+        availability = ('<p>Service links require a workspace with configured service hostnames.</p>'
+                        if user and not any(services.values()) else "")
         service_list = f"""
 <section class="services" aria-labelledby="services-heading">
   <h2 id="services-heading">{'Your services' if user else 'Services'}</h2>
+  {availability}
   <div class="service-grid">{''.join(cards)}</div>
 </section>"""
     if user:

@@ -108,11 +108,14 @@ def valid_hostname(host):
 
 def host_routes(config):
     local_hosts = ("localhost", "127.0.0.1", "0.0.0.0")
-    workspace_addresses = {"localhost": ("localhost", PORT)}
+    workspace_addresses = {"localhost": ("localhost", PORT, HTTPS)}
     for entry in config.lower().split(","):
         if not entry.strip():
             continue
         address, _, domain = (part.strip() for part in entry.partition("="))
+        public_https = address.startswith("https://")
+        if public_https:
+            address = address.removeprefix("https://")
         host, separator, port = address.partition(":")
         host = host.rstrip(".")
         domain = domain.rstrip(".")
@@ -120,7 +123,7 @@ def host_routes(config):
         if separator and (not re.fullmatch(r"[0-9]{1,5}", port) or not 1 <= int(port) <= 65535):
             raise ValueError(f"Invalid HTTP port in DODO_WORKSPACE_HOSTS: {address}")
         if not valid_hostname(host) or not valid_hostname(domain):
-            raise ValueError("DODO_WORKSPACE_HOSTS expects host[:port][=service-domain]")
+            raise ValueError("DODO_WORKSPACE_HOSTS expects [https://]host[:port][=service-domain]")
         try:
             IPv4Address(host)
         except ValueError:
@@ -130,17 +133,22 @@ def host_routes(config):
             raise ValueError(f"Set a DNS service domain for {host} using {host}=example.home.arpa")
         if host in local_hosts or host in workspace_addresses:
             raise ValueError(f"Duplicate or reserved DodoStack workspace hostname: {host}")
-        workspace_addresses[host] = (domain, int(port) if separator else PORT)
+        if domain.endswith(".trycloudflare.com") and host != domain:
+            raise ValueError("A Quick Tunnel hostname must be configured as its own workspace.")
+        default_port = 443 if public_https else PORT
+        workspace_addresses[host] = (domain, int(port) if separator else default_port, HTTPS or public_https)
 
     # Register each service domain as a workspace with the same browser-facing port.
-    for domain, port in tuple(workspace_addresses.values()):
-        if workspace_addresses.setdefault(domain, (domain, port)) != (domain, port):
+    for domain, port, secure in tuple(workspace_addresses.values()):
+        address = (domain, port, secure)
+        if workspace_addresses.setdefault(domain, address) != address:
             raise ValueError(f"Conflicting DodoStack workspace settings for service domain: {domain}")
 
     routes = {host: None for host in (*local_hosts, *workspace_addresses)}
-    for host, (domain, port) in workspace_addresses.items():
-        services = {name: f"{name}.{domain}" for name in SERVICE_MODULES}
-        identity = Identity(accounts, services, port, private=PRIVATE, workspace_host=host, secure=HTTPS)
+    for host, (domain, port, secure) in workspace_addresses.items():
+        quick_tunnel = domain.endswith(".trycloudflare.com")
+        services = {} if quick_tunnel else {name: f"{name}.{domain}" for name in SERVICE_MODULES}
+        identity = Identity(accounts, services, port, private=PRIVATE, workspace_host=host, secure=secure)
         identity.admin_tabs = admin_tabs
         routes[host] = (identity, None)
         if host != domain:
@@ -220,7 +228,8 @@ class DodoHandler(BaseHTTPRequestHandler):
         token = request_id.set(secrets.token_hex(8))
         self.status = None
         self.headers_sent = False
-        self.workspace_url = HOST_ROUTES["localhost"][0].workspace_url
+        self.workspace_url = ""
+        self.secure = HTTPS
         self.service = None
         self.api = False
         self.route_name = "http"
@@ -263,6 +272,13 @@ class DodoHandler(BaseHTTPRequestHandler):
         if not target.path.startswith("/") and target.path != "*":
             raise BadRequest()
         host = self.headers.get("Host", "localhost").lower()
+        length = self.headers.get("Content-Length", "0").strip()
+        if (self.headers.get("Transfer-Encoding") is not None
+                or len(self.headers.get_all("Content-Length", [])) > 1
+                or len(self.headers.get_all("Host", [])) > 1
+                or not re.fullmatch(r"[0-9]{1,20}", length)
+                or not re.fullmatch(r"[a-z0-9.-]+(?::[0-9]{1,5})?", host)):
+            raise BadRequest()
         hostname = host.partition(":")[0].rstrip(".")
         self.api = (target.path.startswith("/api/") or target.path == "/api"
                     or "application/json" in self.headers.get("Accept", "").lower()
@@ -273,23 +289,16 @@ class DodoHandler(BaseHTTPRequestHandler):
                   self.client_address[0], bool(target.query))
         if route is None:
             self.route_name = "unknown_host"
-            parent_route = HOST_ROUTES.get(hostname.partition(".")[2])
-            if parent_route:
-                self.workspace_url = parent_route[0].workspace_url
+            # Serve the generic error page's assets even for unregistered hosts.
+            if self.command in {"GET", "HEAD"} and target.path in {"/static/workspace.css", "/static/branding/stack.png"}:
+                return self.send_result(workspace_static(request_from_handler(self)))
             return self.send_failure(404, title="Unknown DodoStack service",
                                      detail="This hostname is not registered as a DodoStack service.")
         identity, service = route
-        self.workspace_url = identity.workspace_url
+        self.workspace_url = identity.workspace_url if service else ""
+        self.secure = identity.secure
         self.service = service
         self.route_name = service or "workspace"
-        length = self.headers.get("Content-Length", "0").strip()
-        if (self.headers.get("Transfer-Encoding") is not None
-                or len(self.headers.get_all("Content-Length", [])) > 1
-                or len(self.headers.get_all("Host", [])) > 1
-                or not re.fullmatch(r"[0-9]{1,20}", length)):
-            raise BadRequest()
-        if not re.fullmatch(r"[a-z0-9.-]+(?::[0-9]{1,5})?", host):
-            raise BadRequest()
         host_port = host.partition(":")[2]
         default_port = "443" if identity.secure else "80"
         origin_host = hostname if not host_port or host_port == default_port else f"{hostname}:{host_port}"
@@ -438,7 +447,7 @@ class DodoHandler(BaseHTTPRequestHandler):
             self.send_header("Referrer-Policy", "strict-origin")
         if not any(line.lower().startswith(b"x-frame-options:") for line in getattr(self, "_headers_buffer", ())):
             self.send_header("X-Frame-Options", "DENY")
-        if HTTPS:
+        if self.secure:
             self.send_header("Strict-Transport-Security", "max-age=86400")
         self.headers_sent = True
         super().end_headers()

@@ -427,7 +427,7 @@ class Identity:
             if service not in self.services:
                 return pages.error_response(404, title="Unknown DodoStack service",
                                             detail="The requested service is not registered in this workspace.",
-                                            workspace_url=self.workspace_url, api=api)
+                                            api=api)
             if not target.startswith("/") or target.startswith("//"):
                 target = "/"
             if user:
@@ -495,7 +495,8 @@ class Identity:
             if selected in self.services:
                 return redirect(self.service_url(selected))
             response = Response.html(pages.dashboard(
-                user, {key: self.service_url(key) for key in self.services}, private=self.private,
+                user, {key: self.service_url(key) if key in self.services else None
+                       for key in pages.SERVICE_NAMES}, private=self.private,
                 token=self.form_token(request) if user else "",
             ))
             response.headers["Cache-Control"] = "no-store"

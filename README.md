@@ -75,6 +75,19 @@ For DuckDNS, a certificate for both `dodoai.duckdns.org` and `*.dodoai.duckdns.o
 
 Direct TLS encrypts the connection. The bundled listener uses Python's `http.server`, which Python advises against exposing in production. It has connection limits and timeouts, and can still be exhausted by untrusted traffic. Keep HTTP deployments on a trusted network.
 
+### Cloudflare Tunnel
+
+When `cloudflared` and DodoStack run on the same server, `cloudflared tunnel --url http://127.0.0.1:8123` can forward public HTTPS to local HTTP. Add the public address printed by `cloudflared` to the root `.env`, then restart DodoStack. Keep the original browser Host header when forwarding to DodoStack.
+
+```dotenv
+DODO_HOST=127.0.0.1
+DODO_PORT=8123
+DODO_HTTPS=false
+DODO_WORKSPACE_HOSTS=https://example.trycloudflare.com
+```
+
+The `https://` prefix selects HTTPS for public URLs, origin checks and secure cookies for that workspace. Other entries without a scheme continue to use `DODO_HTTPS`. A Quick Tunnel has one temporary hostname, so it exposes the workspace and workspace admin routes. The service cards show descriptions there. For clickable service cards and all six services, use a named tunnel with a domain you control, register `https://your-domain`, and route that domain and each service hostname to the same local HTTP listener.
+
 ## DodoKey password vault
 
 Open DodoKey from **Your services** and set a separate vault password of at least 12 characters. Add, edit, generate, copy, and delete saved logins from the vault. Your browser encrypts the vault before saving it to DodoStack and locks it after five minutes of inactivity. Keep your vault password safe because resetting your DodoStack account password cannot recover the vault.
