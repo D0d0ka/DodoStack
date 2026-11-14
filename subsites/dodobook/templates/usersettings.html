@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <link rel="icon" href="/static/dodobook.png">
     <title>User Settings - Dodobook</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='workspace-link.css') }}">
     <style>
         :root{--bg:#071428;--panel:#0b2742;--card:#0f3b61;--accent:#1e66b0;--muted:#234a6f;--text:#e6f2ff;--muted-text:#bcd4f2;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
         html,body{height:100%;margin:0;background: linear-gradient(180deg,var(--bg),#062033 80%);color:var(--text);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
@@ -37,6 +38,7 @@
 <body>
     <header>
         <h1 onclick="location.href='/'">Dodobook</h1>
+        <a class="workspace-link" href="{{ workspace_url }}/">← DodoStack</a>
     </header>
 
     <main class="center">

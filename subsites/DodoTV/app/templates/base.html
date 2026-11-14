@@ -32,6 +32,7 @@
       </nav>
 
       <div class="nav-actions">
+        <a href="{{ workspace_url }}/" class="btn btn-primary btn-sm">← DodoStack</a>
         <form action="{{ url_for('main.search') }}" method="get" class="nav-search" role="search">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 21l-4.35-4.35M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z"/></svg>
           <input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Search movies & shows" aria-label="Search" maxlength="100">

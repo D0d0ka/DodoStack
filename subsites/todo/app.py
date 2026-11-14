@@ -125,7 +125,8 @@ def page(request, title, sidebar, content, status=200):
 <link rel="stylesheet" href="/static/css/style.css"></head>
 <body><div class="shell"><aside class="sidebar">
 <a class="brand" href="/"><img src="/static/images/dodo_sign.png" alt="">DodoTodo</a>
-{sidebar}<footer><a href="{safe(request.workspace_url)}/">Workspace</a>
+<a class="workspace-link" href="{safe(request.workspace_url)}/">← DodoStack</a>
+{sidebar}<footer>
 <span>{safe(request.user["username"])}</span>{signout}</footer></aside>
 <main>{content}</main></div></body></html>''', status)
     response.headers.update({"Cache-Control": "no-store", "Referrer-Policy": "strict-origin"})

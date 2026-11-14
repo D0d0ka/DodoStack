@@ -18,7 +18,7 @@
     </a>
     <nav aria-label="Workspace">
       {% if current_user.is_admin and not admin_preview %}<a href="{{ url_for('admin_settings') }}">Settings</a>{% endif %}
-      <a href="{{ workspace_url }}/">DodoStack</a>
+      <a class="button" href="{{ workspace_url }}/">← DodoStack</a>
     </nav>
   </div>
 </header>

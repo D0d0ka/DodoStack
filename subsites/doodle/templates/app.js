@@ -513,9 +513,31 @@ function resetTabs(defaultTab = 'all') {
    ALL TAB — web search
    ══════════════════════════════════════════════════════════════════════════ */
 
+function renderServiceResult(query) {
+  const block = $('serviceResult');
+  if (!block) return;
+
+  // Match whole service names and aliases, ignoring case and separators.
+  const normalize = text => text.toLowerCase().replace(/[\s_.-]+/g, '');
+  const term = normalize(query.trim().replace(/^"([^"]+)"$/, '$1'));
+  const services = JSON.parse($('workspaceServices').textContent);
+  const match = services.find(service => service.terms.some(name => normalize(name) === term));
+  if (!match) {
+    hide(block);
+    return;
+  }
+
+  const link = $('serviceResultLink');
+  link.href = match.url;
+  link.textContent = match.name;
+  $('serviceResultDescription').textContent = match.description;
+  show(block);
+}
+
 async function doSearch(q, preferredTab = 'all', optionsOverride = null, page = 1) {
   if (!q) return;
 
+  renderServiceResult(q);
   checkEasterEgg(q);
 
   const activeTab = normalizeTab(preferredTab);

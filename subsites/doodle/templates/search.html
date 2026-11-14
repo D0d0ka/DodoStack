@@ -29,6 +29,7 @@
         <button type="submit" class="search-btn">Search</button>
         <button type="button" class="search-btn filter-toggle-btn" id="toggleFiltersBtn" aria-expanded="false">Show filters</button>
       </form>
+      <a class="workspace-link" href="{{ workspace_url }}/">← DodoStack</a>
     </div>
   </header>
 
@@ -134,6 +135,12 @@
         </div>
       </section>
 
+      <section class="service-result hidden" id="serviceResult" aria-labelledby="serviceResultTitle">
+        <h2 class="recommended-heading" id="serviceResultTitle">DodoStack service</h2>
+        <a class="result-title" id="serviceResultLink"></a>
+        <p class="result-snippet" id="serviceResultDescription"></p>
+      </section>
+
       <!-- All tab -->
       <div class="tab-content" id="tab-all">
         <!-- Easter Egg panel -->
@@ -189,6 +196,7 @@
 
   </main>
 
+  <script type="application/json" id="workspaceServices">{{ services | tojson }}</script>
   <script src="app.js"></script>
 </body>
 </html>

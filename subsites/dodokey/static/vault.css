@@ -10,6 +10,7 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; }
+.clipboard-field { position: fixed; inset: 0 auto auto 0; opacity: 0; pointer-events: none; }
 .shell { width: min(1040px, calc(100% - 32px)); margin-inline: auto; }
 .topbar { background: #fff; border-bottom: 1px solid var(--line); }
 .topbar-inner, .topbar nav, .brand, .vault-heading, .entry, .actions {
@@ -53,7 +54,7 @@ input {
   background: #fcfdf9;
 }
 input, button { font: inherit; }
-button {
+.workspace-link, button {
   min-height: 42px;
   padding: 7px 12px;
   border: 1px solid var(--line);
@@ -63,7 +64,8 @@ button {
   font-weight: 650;
   cursor: pointer;
 }
-button:hover { background: #edf2e9; }
+.workspace-link { display: inline-flex; align-items: center; text-decoration: none; }
+.workspace-link:hover, button:hover { background: #edf2e9; }
 button:disabled { cursor: wait; opacity: .65; }
 button.primary { background: var(--green); color: #fff; border-color: var(--green); }
 button.primary:hover { background: #153926; }

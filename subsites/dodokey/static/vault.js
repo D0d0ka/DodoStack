@@ -1,4 +1,7 @@
-import { decryptVault, deriveKey, encryptVault, fromBase64, generatePassword, randomBytes } from "./crypto.js";
+import {
+  clearKey, decryptVault, deriveKey, encryptVault, fromBase64,
+  generatePassword, newEntryId, randomBytes, supportsVaultCrypto,
+} from "./crypto.js";
 
 const byId = (id) => document.getElementById(id);
 const csrf = document.querySelector('meta[name="csrf-token"]').content;
@@ -81,6 +84,7 @@ function closeEditor() {
 function lockVault(message = "", error = false) {
   lockGeneration += 1;
   clearTimeout(idleTimeout);
+  clearKey(activeVault?.key);
   activeVault = null;
   closeEditor();
   byId("entry-fields").disabled = false;
@@ -117,6 +121,7 @@ async function unlock(event) {
   const generation = lockGeneration;
   byId("unlock-fields").disabled = true;
   report();
+  let key;
   try {
     const data = await vaultRequest();
     if (generation !== lockGeneration) return;
@@ -129,7 +134,7 @@ async function unlock(event) {
     const salt = creating ? randomBytes(16) : fromBase64(data.vault.salt);
     const keyPromise = deriveKey(master.value, salt);
     unlockForm.reset();
-    const key = await keyPromise;
+    key = await keyPromise;
     if (generation !== lockGeneration) return;
 
     let entries = [];
@@ -147,6 +152,7 @@ async function unlock(event) {
     }
     if (generation !== lockGeneration) return;
     activeVault = { key, salt, revision, entries };
+    key = undefined;
     byId("locked-panel").hidden = true;
     byId("open-panel").hidden = false;
     renderEntries();
@@ -155,7 +161,29 @@ async function unlock(event) {
   } catch (error) {
     if (generation === lockGeneration) report(error.message, true);
   } finally {
+    clearKey(key);
     if (generation === lockGeneration) byId("unlock-fields").disabled = false;
+  }
+}
+
+async function copyPassword(password) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(password);
+    return;
+  }
+  const previousFocus = document.activeElement;
+  const field = document.createElement("textarea");
+  field.className = "clipboard-field";
+  field.readOnly = true;
+  field.value = password;
+  document.body.append(field);
+  try {
+    field.select();
+    if (!document.execCommand("copy")) throw new Error("Clipboard unavailable.");
+  } finally {
+    field.value = "";
+    field.remove();
+    previousFocus?.focus();
   }
 }
 
@@ -170,7 +198,7 @@ function renderEntries() {
     row.querySelector(".entry-detail").textContent = [entry.website, entry.username].filter(Boolean).join(" · ");
     row.querySelector(".copy").addEventListener("click", async () => {
       try {
-        await navigator.clipboard.writeText(entry.password);
+        await copyPassword(entry.password);
         if (activeVault) report("Password copied.");
       } catch {
         if (activeVault) report("Clipboard unavailable. Open the login to copy its password.", true);
@@ -224,10 +252,10 @@ async function persistEntries(entries, message) {
   }
 }
 
-if (globalThis.crypto?.subtle) {
+if (supportsVaultCrypto) {
   prepareUnlock();
 } else {
-  report("Open DodoKey in a browser with Web Crypto support on localhost or HTTPS.", true);
+  report("DodoKey needs a browser that can generate secure random values.", true);
 }
 
 unlockForm.addEventListener("submit", unlock);
@@ -249,7 +277,7 @@ entryForm.addEventListener("submit", (event) => {
     return;
   }
   const entry = {
-    id: editingId ?? crypto.randomUUID(),
+    id: editingId ?? newEntryId(),
     name,
     website: byId("entry-website").value.trim(),
     username: byId("entry-username").value.trim(),
@@ -274,5 +302,5 @@ for (const event of ["pointerdown", "keydown"]) {
 document.addEventListener("visibilitychange", lockIfIdle);
 window.addEventListener("pagehide", () => lockVault());
 window.addEventListener("pageshow", (event) => {
-  if (event.persisted && globalThis.crypto?.subtle) prepareUnlock();
+  if (event.persisted && supportsVaultCrypto) prepareUnlock();
 });

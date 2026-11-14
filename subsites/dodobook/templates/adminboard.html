@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" href="{{ url_for('static', filename='dodobook.png') }}">
     <title>DodoBook Moderation</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='workspace-link.css') }}">
     <style>
         :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
         body { margin: 0; background: #071428; color: #e6f2ff; }
@@ -31,6 +32,7 @@
     <header>
         <h1><img src="{{ url_for('static', filename='dodobook.png') }}" alt="" width="36" height="36"> DodoBook Moderation</h1>
         <a href="{{ url_for('index') }}">Back to DodoBook</a>
+        <a class="workspace-link" href="{{ workspace_url }}/">← DodoStack</a>
     </header>
     <p id="feedback" role="status"></p>
     <main>

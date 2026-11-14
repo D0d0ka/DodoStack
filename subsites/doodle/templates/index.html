@@ -18,8 +18,8 @@
         <span>Doodle</span>
       </a>
       <div class="doodle-account">
+        <a class="workspace-link" href="{{ workspace_url }}/">← DodoStack</a>
         {% if request.shared_user %}
-        <a href="{{ workspace_url }}">{{ request.shared_user.username }}</a>
         <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit">Sign out</button></form>
         {% else %}
         <a href="/login">Sign in</a>

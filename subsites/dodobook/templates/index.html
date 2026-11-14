@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <link rel="icon" href="/static/dodobook.png">
     <title>Dodobook</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='workspace-link.css') }}">
     <style>
         :root{
             --bg: #071428;
@@ -188,6 +189,7 @@
     <header>
         <h1><img src="{{ url_for('static', filename='dodobook.png') }}" alt="" width="36" height="36" style="vertical-align:middle;margin-inline-end:8px"> Welcome to DodoBook</h1>
         <div class="actions">
+            <a class="workspace-link" href="{{ workspace_url }}/">← DodoStack</a>
             <button id="make-post">Make a post</button>
             <div class="user-options-container">
                 <button id="user-options" title="Profile">

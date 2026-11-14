@@ -309,6 +309,14 @@ body {
   padding: 0 2px;
 }
 
+.service-result {
+  margin-bottom: 16px;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
 .recommended-block {
   margin: 0 0 10px;
 }
@@ -841,13 +849,7 @@ body {
 /* ── Header search box (search.html) ────────────────────────────────── */
 .search-header-inner {
   gap: 12px;
-  justify-content: center;
-  position: relative;
-}
-
-.search-header-inner .brand {
-  position: absolute;
-  left: 0;
+  flex-wrap: wrap;
 }
 
 .header-search-box {
@@ -867,6 +869,7 @@ body {
 }
 .header-search-box input[type="text"] {
   flex: 1;
+  min-width: 0;
   border: none;
   outline: none;
   padding: 9px 18px;
@@ -2148,6 +2151,11 @@ body {
 .ee-rickroll-wrap iframe { width: 100%; max-width: 560px; aspect-ratio: 16/9; border: none; border-radius: 10px; }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 660px) {
+  .search-header-inner .header-search-box { order: 1; flex-basis: 100%; max-width: none; }
+  .header-search-box .search-btn { padding-inline: 10px; }
+}
+
 @media (max-width: 600px) {
   .brand-mascot { height: 20px; }
   .logo { font-size: 52px; }
@@ -2164,8 +2172,13 @@ body {
 }
 
 .doodle-account { display: flex; align-items: center; gap: .7rem; }
-.doodle-account a { color: inherit; font-weight: 600; }
-.doodle-account button {
+.workspace-link {
+  white-space: nowrap;
+  text-decoration: none;
+  font-weight: 600;
+}
+.workspace-link:hover { text-decoration: underline; }
+.workspace-link, .doodle-account button {
   border: 1px solid currentColor;
   border-radius: .45rem;
   padding: .3rem .55rem;

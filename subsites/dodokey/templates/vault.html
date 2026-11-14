@@ -17,7 +17,7 @@
         <span>DodoKey</span>
       </a>
       <nav aria-label="Account">
-        <a href="{{ workspace_url }}/">Workspace</a>
+        <a class="workspace-link" href="{{ workspace_url }}/">← DodoStack</a>
         <form method="post" action="{{ url_for('logout') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit">Sign out</button>

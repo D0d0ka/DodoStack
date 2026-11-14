@@ -10,10 +10,22 @@ import time
 from functools import wraps
 from werkzeug.exceptions import BadRequest, abort
 
+from dodo.pages import SERVICE_DESCRIPTIONS, service_name
+
 from . import database
 from .crawler import crawler_manager
 
 FRONTEND = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
+
+SERVICE_SEARCH_ALIASES = {
+    "dodomail": ("mail", "email", "e-post"),
+    "todo": ("to-do", "tasks", "ülesanded"),
+    "doodle": ("web search", "veebiotsing", "otsing"),
+    "dodobook": ("social network", "sotsiaalvõrgustik"),
+    "dodotv": ("tv", "movies", "filmid"),
+    "dodokey": ("password manager", "paroolihaldur"),
+    "dodocalender": ("calendar", "kalender", "Dodo Calendar", "Dodo Kalender"),
+}
 
 app = WebApplication(__name__)
 app.before_request(verify_form_token)
@@ -1149,7 +1161,17 @@ def logout():
 
 @app.get('/search')
 def search_page():
-    return render_template('search.html')
+    identity = request.identity
+    services = [
+        {
+            "name": service_name(key),
+            "terms": [key, service_name(key), *SERVICE_SEARCH_ALIASES.get(key, ())],
+            "description": SERVICE_DESCRIPTIONS[key],
+            "url": identity.service_url(key),
+        }
+        for key in SERVICE_DESCRIPTIONS if key in identity.services
+    ]
+    return render_template('search.html', services=services)
 
 
 @app.get('/admin')

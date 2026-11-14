@@ -57,7 +57,7 @@ Configure DNS or the client device's hosts file so that the service domain and i
 192.168.0.11 dodostack.home.arpa todo.dodostack.home.arpa doodle.dodostack.home.arpa dodobook.dodostack.home.arpa dodotv.dodostack.home.arpa dodokey.dodostack.home.arpa dodocalender.dodostack.home.arpa dodomail.dodostack.home.arpa
 ```
 
-For `dodoai`, point those service names under `dodoai` to the Pi's Tailscale IP. The workspace name resolving on Tailscale does not itself create DNS records for its service names. DodoKey's browser encryption requires a secure context such as localhost or HTTPS.
+For `dodoai`, point those service names under `dodoai` to the Pi's Tailscale IP. The workspace name resolving on Tailscale does not itself create DNS records for its service names. DodoKey supports HTTP on these service names and still encrypts vault data in the browser. Use HTTP only over a trusted connection because a network attacker can modify the page or intercept the sign-in session.
 
 ### Direct HTTPS on port 8000
 

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <link rel="icon" href="/static/dodobook.png">
     <title>Page Not Found - Dodobook</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='workspace-link.css') }}">
     <style>
         :root{
             --bg: #071428;
@@ -37,6 +38,7 @@
 <body>
     <header>
         <h1>Dodobook</h1>
+        <a class="workspace-link" href="{{ workspace_url }}/">← DodoStack</a>
     </header>
     <main class="container">
         <div class="panel not-found-panel">

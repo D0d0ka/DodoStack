@@ -23,7 +23,7 @@ a { color: var(--accent); }
 }
 .brand { display: flex; gap: .65rem; align-items: center; font-size: 1.35rem; font-weight: 750; color: inherit; text-decoration: none; }
 .brand img { object-fit: contain; }
-.workspace, time, .address { color: var(--muted); font-size: .875rem; }
+time, .address { color: var(--muted); font-size: .875rem; }
 .layout { display: grid; grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr); gap: 1.5rem; padding: 1.5rem clamp(1rem, 4vw, 3rem); }
 .address { overflow-wrap: anywhere; margin: .7rem 1rem 1.25rem; }
 nav { display: grid; gap: .25rem; }
