@@ -2,6 +2,8 @@
 
 from contextlib import closing
 
+SUPPORT_ADDRESS = "support@dmail"
+
 
 def initialize(db):
     db.execute("""CREATE TABLE IF NOT EXISTS mail_messages (
@@ -22,6 +24,20 @@ def initialize(db):
         ON mail_messages(recipient_id) WHERE sender = 'stack'""")
     db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS mail_pending_invite
         ON mail_messages(event_id, recipient_id) WHERE invitation_status = 'pending'""")
+
+    db.execute("""CREATE TABLE IF NOT EXISTS user_mail (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_id INTEGER REFERENCES users(id),
+        recipient_id INTEGER REFERENCES users(id),
+        subject TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        is_read INTEGER NOT NULL DEFAULT 0,
+        folder TEXT NOT NULL DEFAULT 'inbox' CHECK (folder IN ('inbox', 'archive', 'trash')),
+        CHECK (sender_id IS NOT NULL OR recipient_id IS NOT NULL)
+    )""")
+    db.execute("CREATE INDEX IF NOT EXISTS user_mail_recipient ON user_mail(recipient_id, folder, id DESC)")
+    db.execute("CREATE INDEX IF NOT EXISTS user_mail_sender ON user_mail(sender_id, id DESC)")
 
 
 def welcome(db, account_id):

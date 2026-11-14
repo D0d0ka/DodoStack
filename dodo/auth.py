@@ -18,7 +18,7 @@ import unicodedata
 
 from email_validator import EmailNotValidError, validate_email
 
-from subsites.dodomail.delivery import initialize as initialize_mail, welcome
+from subsites.dodomail.delivery import SUPPORT_ADDRESS, initialize as initialize_mail, welcome
 
 from .framework import Request, Response, cookie_name, redirect
 from . import pages
@@ -251,7 +251,9 @@ class AccountStore:
         base = name_local_part(clean_name(first_name), clean_name(last_name))
         with self.connect() as db:
             candidate, number = base, 2
-            while db.execute("SELECT 1 FROM users WHERE dmail_address=?", (candidate + "@dmail",)).fetchone():
+            while candidate + "@dmail" == SUPPORT_ADDRESS or db.execute(
+                "SELECT 1 FROM users WHERE dmail_address=?", (candidate + "@dmail",),
+            ).fetchone():
                 candidate = f"{base}{number}"
                 number += 1
         return candidate
@@ -272,7 +274,9 @@ class AccountStore:
         password_hash = self.hash_password(password)
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            if db.execute("SELECT 1 FROM users WHERE dmail_address=?", (address,)).fetchone():
+            if address == SUPPORT_ADDRESS or db.execute(
+                "SELECT 1 FROM users WHERE dmail_address=?", (address,),
+            ).fetchone():
                 raise DmailAddressTaken
             cursor = db.execute(
                 """INSERT INTO users(username,password_hash,email,birth_date,real_name,dmail_address,

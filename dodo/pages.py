@@ -23,6 +23,8 @@ SERVICE_NAMES = {
 
 
 def service_name(key):
+    if key == "stack":
+        return "DodoStack"
     return SERVICE_NAMES.get(key, key.title())
 
 

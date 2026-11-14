@@ -56,3 +56,30 @@ button.primary:hover { background: #bfddff; }
     .messages a { grid-template-columns: minmax(0, 1fr) auto; }
     .messages .subject { grid-row: 2; grid-column: 1 / -1; }
 }
+.button {
+    display: inline-block;
+    border: 1px solid var(--border);
+    border-radius: .55rem;
+    background: #203654;
+    color: inherit;
+    padding: .55rem .85rem;
+    text-decoration: none;
+}
+.button:hover { background: var(--active); }
+.button.primary { background: var(--accent); color: #0d172a; }
+.compose { margin: 0 0 .85rem; }
+.support-link { display: inline-block; margin: 1rem; font-size: .875rem; }
+.draft { display: grid; gap: 1rem; margin: 1rem 0; }
+.draft label { display: grid; gap: .35rem; }
+.draft input, .draft textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: .55rem;
+    background: #0d172a;
+    color: inherit;
+    font: inherit;
+    padding: .65rem;
+}
+.draft button { justify-self: start; }
+.support { padding: 1.5rem; max-width: 72rem; margin: auto; }
+.support-message { margin-top: 1rem; min-height: 0; }

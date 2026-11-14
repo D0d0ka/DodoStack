@@ -67,7 +67,7 @@ workspace = Application("workspace", static_dir=BASE_DIR / "static")
 
 BRAND_FILES = {
     "stack": BASE_DIR / "assets/server-icon.png",
-    "dodomail": BASE_DIR / "assets/dodomail.png",
+    "dodomail": BASE_DIR / "subsites/dodomail/static/dodomail.png",
     "todo": BASE_DIR / "subsites/todo/static/images/dodo_sign.png",
     "doodle": BASE_DIR / "subsites/doodle/templates/dodo.png",
     "dodobook": BASE_DIR / "subsites/dodobook/static/dodobook.png",

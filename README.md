@@ -123,7 +123,9 @@ To reset local data, stop the server and remove the application databases listed
 
 ## DodoMail and calendar invitations
 
-DodoMail receives plain-text updates from DodoStack services. To deliver mail from an authenticated `WebApplication` handler, call `subsites.dodomail.delivery.deliver(request, recipient_id, subject, body)`. The sender comes from the server's service routing context and is authenticated with the shared service assertion. The delivery function accepts the DodoStack account ID of an approved recipient.
+Use **Compose** to send plain-text mail to another DodoMail address. **Sent** shows your outgoing mail. Open a personal message to reply or forward it. Send questions to `support@dmail`. Administrators can read and reply to those messages from the workspace’s **Support** tab.
+
+DodoMail also receives plain-text updates from DodoStack services. To deliver mail from an authenticated `WebApplication` handler, call `subsites.dodomail.delivery.deliver(request, recipient_id, subject, body)`. The sender comes from the server's service routing context and is authenticated with the shared service assertion. The delivery function accepts the DodoStack account ID of an approved recipient.
 
 To invite someone, open an event you own in Dodo Calender and enter their username or DodoMail address under **Sharing**. They can accept or decline from their inbox. Accepted events appear in their calendar alongside events added through sharing links.
 

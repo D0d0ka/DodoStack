@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0d172a">
-  <title>{{ message.subject if message else folders[folder] }} · DodoMail</title>
+  <title>{{ message.subject if message else ("New message" if draft is not none else folders[folder]) }} · DodoMail</title>
   <link rel="icon" href="{{ url_for('logo') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='mail.css') }}">
 </head>
@@ -16,6 +16,7 @@
   <main class="layout">
     <aside>
       <p class="address">{{ address }}</p>
+      <a class="button primary compose" href="{{ url_for('compose') }}">Compose</a>
       <nav aria-label="Mail folders">
         {% for key, label in folders.items() %}
           <a href="{{ url_for('inbox', folder=key) }}"{% if key == folder %} aria-current="page"{% endif %}>
@@ -23,14 +24,26 @@
           </a>
         {% endfor %}
       </nav>
+      <a class="support-link" href="{{ url_for('compose', to='support') }}">Contact support</a>
     </aside>
     <section class="mail">
-      {% if message %}
+      {% if draft is not none %}
+        <h1>New message</h1>
+        {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+        <form class="draft" method="post" action="{{ url_for('compose') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label>To <input name="recipient" value="{{ draft.recipient }}" placeholder="name@dmail" maxlength="70" required></label>
+          <label>Subject <input name="subject" value="{{ draft.subject }}" maxlength="200" required></label>
+          <label>Message <textarea name="body" maxlength="12000" rows="10" required>{{ draft.body }}</textarea></label>
+          <button class="primary">Send</button>
+        </form>
+      {% elif message %}
         <a class="back" href="{{ url_for('inbox', folder=folder) }}">← {{ folders[folder] }}</a>
         <article>
           <h1>{{ message.subject }}</h1>
-          <div class="metadata"><strong>{{ sender_name(message.sender) if message.sender != 'stack' else 'DodoStack' }}</strong>
+          <div class="metadata"><strong>{{ (message.sender_address or support_address) if personal else sender_name(message.sender) }}</strong>
             <time datetime="{{ message.created_at|replace(' ', 'T') }}Z">{{ message.created_at }} UTC</time></div>
+          {% if personal %}<p class="address">To {{ message.recipient_address or support_address }}</p>{% endif %}
           <p class="body">{{ message.body }}</p>
           {% if message.invitation_status %}
             <section class="invitation" aria-label="Calendar invitation">
@@ -47,6 +60,11 @@
             </section>
           {% endif %}
         </article>
+        <div class="actions">
+          {% if personal %}<a class="button" href="{{ url_for('compose', source=message.id, mode='reply') }}">Reply</a>{% endif %}
+          <a class="button" href="{{ url_for('compose', source=message.id, mode='forward', kind='personal' if personal else 'service') }}">Forward</a>
+        </div>
+        {% if folder != 'sent' %}
         <form class="actions" method="post">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           {% if message.is_read %}<button name="action" value="unread">Mark unread</button>
@@ -55,13 +73,14 @@
           {% else %}<button name="action" value="inbox">Move to inbox</button>{% endif %}
           {% if folder != 'trash' %}<button name="action" value="trash">Move to trash</button>{% endif %}
         </form>
+        {% endif %}
       {% else %}
         <h1>{{ folders[folder] }}</h1>
         {% if messages %}
           <ul class="messages">
             {% for row in messages %}
-              <li><a class="{{ 'read' if row.is_read else 'unread' }}" href="{{ url_for('message_view', message_id=row.id) }}">
-                <span class="sender">{{ sender_name(row.sender) if row.sender != 'stack' else 'DodoStack' }}</span>
+              <li><a class="{{ 'read' if row.is_read else 'unread' }}" href="{{ url_for('personal_message', message_id=row.id, folder='sent') if row.personal and folder == 'sent' else url_for('personal_message' if row.personal else 'message_view', message_id=row.id) }}">
+                <span class="sender">{{ row.label }}</span>
                 <span class="subject">{% if not row.is_read %}<span class="sr-only">Unread: </span>{% endif %}{{ row.subject }}</span>
                 <time datetime="{{ row.created_at|replace(' ', 'T') }}Z">{{ row.created_at[:10] }}</time>
               </a></li>

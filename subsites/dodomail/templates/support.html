@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Support · DodoMail</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='mail.css') }}">
+</head>
+<body>
+  {{ admin_navigation }}
+  <main class="support">
+    <h1>Support</h1>
+    <p>support@dmail</p>
+    {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+    {% for message in messages %}
+      <article class="mail support-message">
+        <h2>{{ message.subject }}</h2>
+        <div class="metadata"><strong>{{ message.sender_address }}</strong>
+          <time datetime="{{ message.created_at|replace(' ', 'T') }}Z">{{ message.created_at }} UTC</time></div>
+        <p class="body">{{ message.body }}</p>
+        {% set correction = draft if draft and draft.source == message.id else none %}
+        <details{% if correction %} open{% endif %}>
+          <summary>Reply</summary>
+          <form class="draft" method="post" action="{{ url_for('support') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="source" value="{{ message.id }}">
+            <label>Subject <input name="subject" maxlength="200" value="{{ correction.subject if correction else (('Re: ' + message.subject)[:200]) }}" required></label>
+            <label>Message <textarea name="body" maxlength="12000" rows="5" required>{{ correction.body if correction else '' }}</textarea></label>
+            <button class="primary">Send reply</button>
+          </form>
+        </details>
+      </article>
+    {% else %}
+      <p>No support messages.</p>
+    {% endfor %}
+  </main>
+</body>
+</html>
