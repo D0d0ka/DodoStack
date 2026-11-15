@@ -1,0 +1,56 @@
+.dodo-account-menu {
+  display: inline-block;
+  position: relative;
+  color: inherit;
+  text-align: start;
+}
+.dodo-account-menu > summary {
+  cursor: pointer;
+  color: inherit;
+  max-inline-size: 14rem;
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding: .45rem .65rem;
+  border: 1px solid currentColor;
+  border-radius: .5rem;
+}
+.dodo-account-options {
+  position: absolute;
+  z-index: 20;
+  inset-block-start: calc(100% + .4rem);
+  inset-inline-end: 0;
+  min-inline-size: max-content;
+  padding: .35rem;
+  border: 1px solid GrayText;
+  border-radius: .55rem;
+  background: Canvas;
+  color: CanvasText;
+  box-shadow: 0 .3rem 1rem rgb(0 0 0 / .18);
+}
+.dodo-account-up .dodo-account-options {
+  inset-block: auto calc(100% + .4rem);
+  inset-inline: 0 auto;
+}
+@media (max-width: 760px) {
+  .dodo-account-up .dodo-account-options { inset-block: calc(100% + .4rem) auto; }
+}
+.dodo-account-menu .dodo-account-options form { display: block; margin: 0; }
+.dodo-account-menu .dodo-account-options a,
+.dodo-account-menu .dodo-account-options button {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: .5rem .75rem;
+  border: 0;
+  border-radius: .3rem;
+  margin: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.3;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+.dodo-account-menu .dodo-account-options :is(a, button):hover { text-decoration: underline; }
+.dodo-account-menu :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

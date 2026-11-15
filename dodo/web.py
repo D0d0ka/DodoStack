@@ -305,10 +305,20 @@ def render_template(name, **values):
                "get_flashed_messages": get_flashed_messages, "csrf_token": csrf_token,
                "request_id": request_id.get(),
                "admin_base": f"/admin/{request.service}", "admin_preview": request.admin_mount and shared_admin(),
-               "workspace_url": request.identity.workspace_url}
+               "workspace_url": request.identity.workspace_url, "account_menu": render_account_menu}
     for callback in current_app.processors:
         context.update(callback())
     return current_app.templates.get_template(name).render(**(context | values))
+
+
+def render_account_menu():
+    from .pages import account_menu
+    if not request.shared_user:
+        return ""
+    identity = request.identity
+    if request.admin_mount:
+        return Markup(account_menu(request.shared_user["username"], identity.form_token(request)))
+    return Markup(identity.service_account_menu(request, request.shared_user))
 
 
 def jsonify(value=None, **kwargs):

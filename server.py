@@ -167,6 +167,10 @@ def host_routes(config):
 
 
 HOST_ROUTES = host_routes(os.environ.get("DODO_WORKSPACE_HOSTS", ""))
+CONTROL_PATHS = {
+    "/admin", "/admin/role", "/admin/password", "/admin/approve", "/admin/pending",
+    "/admin/delete", "/account/password", "/account/email",
+}
 
 
 def control_panel(request, identity):
@@ -175,13 +179,14 @@ def control_panel(request, identity):
     admin = path.startswith("/admin")
     if not user:
         return redirect("/login")
-    destination = identity.account_destination(user)
-    if destination and path != destination:
+    if admin and (destination := identity.account_destination(user)):
         return redirect(destination)
     if admin and not user["is_admin"]:
         return Response.text("Administrator access required.", 403)
     token = identity.form_token(request)
     message = ""
+    if path in {"/admin/pending", "/admin/delete"} and request.method != "POST":
+        return Response(b"", 405, {"Allow": "POST"})
     if request.method == "POST":
         if not identity.valid_form(request, token):
             return Response.text("Invalid security token.", 403)
@@ -191,6 +196,12 @@ def control_panel(request, identity):
                 return redirect("/")
             if path == "/admin/approve":
                 accounts.approve(request.value("username"))
+                return redirect("/admin")
+            if path in {"/admin/pending", "/admin/delete"}:
+                account_id = request.form.get("account_id", [""])[0]
+                if not re.fullmatch(r"[0-9]{1,19}", account_id) or not 0 < int(account_id) < 2**63:
+                    raise ValueError("Unknown DodoStack account.")
+                accounts.restrict_account(user["id"], int(account_id), delete=path == "/admin/delete")
                 return redirect("/admin")
             if path == "/admin/role":
                 enabled = request.value("enabled")
@@ -208,15 +219,19 @@ def control_panel(request, identity):
                 return redirect("/login")
         except ValueError as error:
             message = str(error)
+        except PermissionError:
+            return Response.text("Administrator access required.", 403)
         except sqlite3.IntegrityError:
             message = "That email is already in use."
     if admin:
         response = Response.html(pages.admin_accounts(accounts.list_accounts(), identity.admin_tabs, token, message,
+                                                      username=user["username"],
                                                       min_password_length=accounts.min_password_length))
     elif path == "/account/email":
-        response = Response.html(pages.email_page(token, user["email"], message))
+        response = Response.html(pages.email_page(token, user["email"], message, username=user["username"]))
     else:
-        response = Response.html(pages.password_page(token, message, min_password_length=accounts.min_password_length))
+        response = Response.html(pages.password_page(token, message, username=user["username"],
+                                                     min_password_length=accounts.min_password_length))
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -311,6 +326,8 @@ class DodoHandler(BaseHTTPRequestHandler):
             return self.send_failure(403, detail="This form must be submitted from the configured DodoStack address.")
         log.debug("Routed request service=%s content_length=%s", self.route_name, length)
         main = service is None
+        if self.command in {"GET", "HEAD"} and target.path == "/static/account-menu.css":
+            return self.send_result(workspace_static(request_from_handler(self)))
         if main and self.command == "POST" and target.path in {"/login", "/signup", "/forgot-password", "/account/password"}:
             delay = auth_rate_limit.retry_after(self.client_address[0])
             if delay:
@@ -360,15 +377,13 @@ class DodoHandler(BaseHTTPRequestHandler):
         request = request_from_handler(self)
         request.secure = identity.secure
         if main:
-            known_path = request.path in {"/", "/login", "/signup", "/logout", "/forgot-password",
-                                          "/auth/authorize", "/signup/address", "/account/pending", "/account/password",
-                                          "/account/email", "/admin", "/admin/role", "/admin/password",
-                                          "/admin/approve"}
+            known_path = request.path in CONTROL_PATHS | {"/", "/login", "/signup", "/logout",
+                         "/forgot-password", "/auth/authorize", "/signup/address", "/account/pending"}
             endpoint = "static" if request.path.startswith("/static/") else "<unmatched>"
             log.debug("Workspace endpoint=%s", request.path if known_path else endpoint)
             if request.path.startswith("/static/"):
                 response = workspace_static(request)
-            elif request.path in {"/admin", "/admin/role", "/admin/password", "/admin/approve", "/account/password", "/account/email"}:
+            elif request.path in CONTROL_PATHS:
                 response = control_panel(request, identity)
             else:
                 response = identity.handle_main(request, api=self.api)

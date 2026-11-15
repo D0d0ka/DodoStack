@@ -7,6 +7,7 @@
   <title>DodoKey · Password vault</title>
   <link rel="icon" href="{{ url_for('static', filename='dodokey.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='vault.css') }}">
+  <link rel="stylesheet" href="/static/account-menu.css">
   <script type="module" src="{{ url_for('static', filename='vault.js') }}"></script>
 </head>
 <body>
@@ -18,10 +19,7 @@
       </a>
       <nav aria-label="Account">
         <a class="workspace-link" href="{{ workspace_url }}/">← DodoStack</a>
-        <form method="post" action="{{ url_for('logout') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit">Sign out</button>
-        </form>
+        {{ account_menu() }}
       </nav>
     </div>
   </header>

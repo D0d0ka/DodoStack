@@ -16,11 +16,13 @@ a { color: var(--accent); }
 .topbar {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     justify-content: space-between;
     gap: 1rem;
     padding: .8rem clamp(1rem, 4vw, 3rem);
     border-bottom: 1px solid var(--border);
 }
+.topbar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .65rem; margin-inline-start: auto; }
 .brand { display: flex; gap: .65rem; align-items: center; font-size: 1.35rem; font-weight: 750; color: inherit; text-decoration: none; }
 .brand img { object-fit: contain; }
 time, .address { color: var(--muted); font-size: .875rem; }
@@ -33,10 +35,10 @@ nav span { font-size: .75rem; color: var(--muted); }
 .mail { min-height: 26rem; border: 1px solid var(--border); background: var(--panel); border-radius: 1rem; padding: 1.25rem; }
 h1 { margin: 0 0 1.15rem; font-size: clamp(1.5rem, 3vw, 2rem); overflow-wrap: anywhere; }
 .messages { margin: 0 -1.25rem; padding: 0; list-style: none; }
-.messages a { display: grid; grid-template-columns: minmax(6rem, 10rem) 1fr auto; gap: .75rem; align-items: baseline; padding: .85rem 1.25rem; border-top: 1px solid var(--border); text-decoration: none; color: inherit; }
+.messages a { display: grid; grid-template-columns: minmax(0, 10rem) minmax(0, 1fr) auto; gap: .75rem; align-items: baseline; padding: .85rem 1.25rem; border-top: 1px solid var(--border); text-decoration: none; color: inherit; }
 .messages a.unread { background: #1d324e; font-weight: 700; }
 .messages a:hover { background: var(--active); }
-.subject, .body { overflow-wrap: anywhere; }
+.sender, .subject, .body, .metadata strong { overflow-wrap: anywhere; }
 .empty { color: var(--muted); padding: 2rem 0; text-align: center; }
 .back { display: inline-block; margin-bottom: 1.2rem; }
 .metadata { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .6rem; border-bottom: 1px solid var(--border); padding-bottom: .8rem; }

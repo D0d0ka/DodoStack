@@ -55,6 +55,8 @@
               <a href="{{ url_for('auth.profile') }}">Viewing activity</a>
               <a href="{{ url_for('auth.history') }}">Watch history</a>
               <a href="{{ url_for('main.browse') }}?type=movie">Browse movies</a>
+              <a href="{{ workspace_url }}/account/password">Change password</a>
+              <a href="{{ workspace_url }}/account/email">Change email</a>
               
               <form action="{{ url_for('auth.logout') }}" method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

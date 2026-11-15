@@ -6,6 +6,7 @@
   <title>{% block title %}Dodo Calender{% endblock %}</title>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='dodocalender.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='calendar.css') }}">
+  <link rel="stylesheet" href="/static/account-menu.css">
   {% block scripts %}{% endblock %}
 </head>
 <body>
@@ -19,6 +20,7 @@
     <nav aria-label="Workspace">
       {% if current_user.is_admin and not admin_preview %}<a href="{{ url_for('admin_settings') }}">Settings</a>{% endif %}
       <a class="button" href="{{ workspace_url }}/">← DodoStack</a>
+      {{ account_menu() }}
     </nav>
   </div>
 </header>

@@ -118,16 +118,17 @@ def option(value, title, current):
 
 
 def page(request, title, sidebar, content, status=200):
-    signout = post(request, "/logout", '<button type="submit">Sign out</button>')
+    account = request.identity.service_account_menu(request, request.user, placement="dodo-account-up")
     response = Response.html(f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{safe(title)} · DodoTodo</title><link rel="icon" href="/static/images/dodo_sign.png">
-<link rel="stylesheet" href="/static/css/style.css"></head>
+<link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="/static/account-menu.css"></head>
 <body><div class="shell"><aside class="sidebar">
 <a class="brand" href="/"><img src="/static/images/dodo_sign.png" alt="">DodoTodo</a>
 <a class="workspace-link" href="{safe(request.workspace_url)}/">← DodoStack</a>
 {sidebar}<footer>
-<span>{safe(request.user["username"])}</span>{signout}</footer></aside>
+{account}</footer></aside>
 <main>{content}</main></div></body></html>''', status)
     response.headers.update({"Cache-Control": "no-store", "Referrer-Policy": "strict-origin"})
     return response

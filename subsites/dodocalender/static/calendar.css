@@ -28,7 +28,7 @@ main.narrow { max-width: 680px; }
 }
 .header-inner { justify-content: space-between; }
 .header-inner { min-height: 72px; }
-.header nav { gap: 18px; }
+.header nav { gap: 18px; flex-wrap: wrap; justify-content: flex-end; }
 .brand { font-weight: 800; font-size: 1.1rem; color: var(--ink); text-decoration: none; }
 .brand img { object-fit: contain; border-radius: 10px; }
 .actions { flex-wrap: wrap; }

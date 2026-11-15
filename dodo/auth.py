@@ -191,13 +191,11 @@ class AccountStore:
     def set_admin(self, username, enabled):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            user = db.execute("SELECT id, is_admin FROM users WHERE username=?", (username,)).fetchone()
+            user = db.execute("SELECT id, is_admin, approved FROM users WHERE username=?", (username,)).fetchone()
             if not user:
                 raise ValueError("Unknown DodoStack account.")
-            if not enabled and user["is_admin"] and db.execute(
-                "SELECT COUNT(*) FROM users WHERE is_admin=1"
-            ).fetchone()[0] == 1:
-                raise ValueError("Keep at least one administrator.")
+            if not enabled:
+                self.require_other_admin(db, user)
             if enabled:
                 db.execute("UPDATE users SET is_admin=1, approved=1 WHERE id=?", (user["id"],))
             else:
@@ -205,7 +203,32 @@ class AccountStore:
 
     def list_accounts(self):
         with self.connect() as db:
-            return db.execute("SELECT username, email, is_admin, approved, password_reset_requested FROM users ORDER BY approved, username").fetchall()
+            return db.execute("SELECT id, username, email, is_admin, approved, password_reset_requested FROM users ORDER BY approved, username").fetchall()
+
+    @staticmethod
+    def require_other_admin(db, user):
+        if user["is_admin"] and user["approved"] and not db.execute(
+            "SELECT 1 FROM users WHERE is_admin=1 AND approved=1 AND id<>?", (user["id"],)
+        ).fetchone():
+            raise ValueError("Keep at least one approved administrator.")
+
+    def restrict_account(self, actor_id, account_id, *, delete):
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if not db.execute(
+                "SELECT 1 FROM users WHERE id=? AND is_admin=1 AND approved=1", (actor_id,)
+            ).fetchone():
+                raise PermissionError
+            user = db.execute("SELECT id, is_admin, approved FROM users WHERE id=?", (account_id,)).fetchone()
+            if not user:
+                raise ValueError("Unknown DodoStack account.")
+            self.require_other_admin(db, user)
+            if delete:
+                db.execute("DELETE FROM mail_messages WHERE recipient_id=?", (account_id,))
+                db.execute("DELETE FROM user_mail WHERE sender_id=? OR recipient_id=?", (account_id, account_id))
+                db.execute("DELETE FROM users WHERE id=?", (account_id,))
+            elif user["approved"]:
+                db.execute("UPDATE users SET approved=0, session_version=session_version+1 WHERE id=?", (account_id,))
 
     def request_password_reset(self, username):
         with self.connect() as db:
@@ -344,6 +367,11 @@ class Identity:
     def csrf_token(self, session, purpose):
         return hmac.new(self.accounts.secret, f"csrf:{purpose}:{session}".encode(), hashlib.sha256).hexdigest()
 
+    def service_account_menu(self, request, user, *, placement=""):
+        token = self.csrf_token(request.cookies[self.service_session], "service-logout")
+        return pages.account_menu(user["username"], token, workspace_url=self.workspace_url,
+                                  logout="/_auth/logout", placement=placement)
+
     @staticmethod
     def valid_form(request, expected):
         supplied = request.form.get("csrf", [""])[0]
@@ -415,6 +443,17 @@ class Identity:
         return response
 
     def handle_service(self, service: str, request: Request):
+        if request.path == "/_auth/logout":
+            if request.method != "POST":
+                return Response(b"", 405, {"Allow": "POST"})
+            session = request.cookies.get(self.service_session, "")
+            user = self.get_service_user(service, session)
+            if not user:
+                return Response.text("Sign in with an approved account.", 401)
+            if not self.valid_form(request, self.csrf_token(session, "service-logout")):
+                return Response.text("Invalid security token.", 403)
+            request.delete_cookie(self.service_session)
+            return self.sign_out_service(user)
         if request.path in {"/_auth/complete", "/_auth/callback"}:
             log.debug("Shared service authentication endpoint=%s service=%s", request.path, service)
             if request.method != "GET":
@@ -485,7 +524,7 @@ class Identity:
                 return redirect("/login")
             if user["approved"]:
                 return redirect("/")
-            response = Response.html(pages.pending_page(self.form_token(request)))
+            response = Response.html(pages.pending_page(self.form_token(request), user["username"]))
             response.headers["Cache-Control"] = "no-store"
             return response
         if path == "/auth/authorize":

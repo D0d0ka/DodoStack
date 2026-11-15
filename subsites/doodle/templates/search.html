@@ -7,6 +7,7 @@
   <title>Doodle Search</title>
   <link rel="icon" type="image/png" href="dodo.png" />
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="/static/account-menu.css" />
 </head>
 <body class="search-page"{% if request.admin_mount %} data-admin-base="{{ admin_base }}"{% endif %}>
 {{ admin_navigation }}
@@ -29,7 +30,10 @@
         <button type="submit" class="search-btn">Search</button>
         <button type="button" class="search-btn filter-toggle-btn" id="toggleFiltersBtn" aria-expanded="false">Show filters</button>
       </form>
-      <a class="workspace-link" href="{{ workspace_url }}/">← DodoStack</a>
+      <div class="doodle-account">
+        <a class="workspace-link" href="{{ workspace_url }}/">← DodoStack</a>
+        {{ account_menu() }}
+      </div>
     </div>
   </header>
 

@@ -43,6 +43,7 @@ def document(title, body, origin="", icon="stack"):
   <title>{safe(title)} · DodoStack</title>
   <link rel="icon" type="image/png" href="{safe(origin)}/static/branding/{safe(icon)}.png">
   <link rel="stylesheet" href="{safe(origin)}/static/workspace.css">
+  <link rel="stylesheet" href="/static/account-menu.css">
 </head>
 <body>{body}</body>
 </html>"""
@@ -113,12 +114,25 @@ def error_response(status, *, title=None, detail=None, workspace_url="", service
     return response
 
 
+def account_menu(username, token, *, workspace_url="", logout="/logout", placement=""):
+    return f"""<details class="dodo-account-menu {safe(placement)}">
+  <summary>{safe(username)}</summary>
+  <div class="dodo-account-options">
+    <a href="{safe(workspace_url)}/account/password">Change password</a>
+    <a href="{safe(workspace_url)}/account/email">Change email</a>
+    <form action="{safe(logout)}" method="post">
+      <input type="hidden" name="csrf" value="{safe(token)}">
+      <button type="submit">Sign out</button>
+    </form>
+  </div>
+</details>"""
+
+
 def dashboard(user, services, *, private=False, token=""):
     if user:
         account = f"""<div class="account">
-  <a class="username" href="/account/email">{safe(user["username"])}</a>
   {'<a class="button primary" href="/admin">Admin</a>' if user["is_admin"] else ''}
-  <form action="/logout" method="post"><input type="hidden" name="csrf" value="{safe(token)}"><button class="button" type="submit">Sign out</button></form>
+  {account_menu(user["username"], token)}
 </div>"""
     else:
         account = """<div class="account">
@@ -267,42 +281,56 @@ def admin_navigation(tabs, selected=""):
 </nav>"""
 
 
-def admin_accounts(accounts, tabs, token, message="", *, min_password_length=8):
+def admin_accounts(accounts, tabs, token, message="", *, username, min_password_length=8):
     rows = []
     for account in accounts:
-        username = safe(account["username"])
+        name = safe(account["username"])
         role = "Administrator" if account["is_admin"] else "Member"
         action = "Remove admin" if account["is_admin"] else "Make admin"
         enabled = 0 if account["is_admin"] else 1
         approval = f"""
 <form method="post" action="/admin/approve">
   <input type="hidden" name="csrf" value="{token}">
-  <input type="hidden" name="username" value="{username}">
+  <input type="hidden" name="username" value="{name}">
   <button class="button primary" type="submit">Approve account</button>
-</form>""" if not account["approved"] else ""
+</form>""" if not account["approved"] else f"""
+<form method="post" action="/admin/pending">
+  <input type="hidden" name="csrf" value="{token}">
+  <input type="hidden" name="account_id" value="{account['id']}">
+  <button class="button" type="submit">Return to approval pending</button>
+</form>"""
         rows.append(f"""
 <section class="service-detail account-row">
-  <h2>{username}</h2><p>{role} · {'Approved' if account["approved"] else 'Awaiting approval'}</p>
+  <h2>{name}</h2><p>{role} · {'Approved' if account["approved"] else 'Awaiting approval'}</p>
   <p>{safe(account["email"] or "Email required")}</p>
   {approval}
   {'<p role="status">Password reset requested</p>' if account["password_reset_requested"] else ''}
   <form method="post" action="/admin/role">
     <input type="hidden" name="csrf" value="{token}">
-    <input type="hidden" name="username" value="{username}">
+    <input type="hidden" name="username" value="{name}">
     <button class="button" name="enabled" value="{enabled}">{action}</button>
   </form>
   <form method="post" action="/admin/password">
     <input type="hidden" name="csrf" value="{token}">
-    <input type="hidden" name="username" value="{username}">
-    <label>New password for {username}
+    <input type="hidden" name="username" value="{name}">
+    <label>New password for {name}
       <input type="password" name="password" autocomplete="new-password" minlength="{min_password_length}" maxlength="255" required>
     </label>
     <button class="button" type="submit">Reset password</button>
   </form>
+  <details class="delete-account">
+    <summary>Delete account</summary>
+    <p>Permanently delete {name} and their sent and received DodoMail messages?</p>
+    <form method="post" action="/admin/delete">
+      <input type="hidden" name="csrf" value="{token}">
+      <input type="hidden" name="account_id" value="{account['id']}">
+      <button class="button" type="submit">Permanently delete {name}</button>
+    </form>
+  </details>
 </section>""")
     alert = f'<p role="status">{safe(message)}</p>' if message else ""
     return document("Administration", f"""
-{header()} {admin_navigation(tabs, "accounts")}
+{header(account_menu(username, token))} {admin_navigation(tabs, "accounts")}
 <main class="workspace">
   <h1>Accounts</h1>
   {alert}
@@ -310,10 +338,10 @@ def admin_accounts(accounts, tabs, token, message="", *, min_password_length=8):
 </main>""")
 
 
-def password_page(token, message="", *, min_password_length=8):
+def password_page(token, message="", *, username, min_password_length=8):
     alert = f'<p role="status">{safe(message)}</p>' if message else ""
     return document("Change password", f"""
-{header()}
+{header(account_menu(username, token))}
 <main class="auth-layout">
   <section class="auth-card">
     <h1>Change password</h1>
@@ -354,11 +382,11 @@ def reset_request_page(submitted, token):
 
 
 
-def email_page(token, current_email, message=""):
+def email_page(token, current_email, message="", *, username):
     title = "Update your email"
     alert = f'<p class="error" role="alert">{safe(message)}</p>' if message else ""
     return document(title, f"""
-{header()}
+{header(account_menu(username, token))}
 <main class="auth-layout">
   <section class="auth-card">
     <h1>{title}</h1>
@@ -370,20 +398,17 @@ def email_page(token, current_email, message=""):
              value="{safe(current_email or '')}" required>
       <button class="button primary" type="submit">Save email</button>
     </form>
-    {('<p><a href="/account/password">Change password</a></p>' if current_email else '')}
-    <form method="post" action="/logout"><input type="hidden" name="csrf" value="{safe(token)}"><button class="button" type="submit">Sign out</button></form>
   </section>
 </main>""")
 
 
-def pending_page(token):
+def pending_page(token, username):
     return document("Approval pending", f"""
-{header()}
+{header(account_menu(username, token))}
 <main class="workspace">
   <section class="service-detail">
     <h1>Approval pending</h1>
     <p>A DodoStack administrator needs to approve your account before you can open the services.</p>
     <a class="button primary" href="/account/pending">Check approval status</a>
-    <form method="post" action="/logout"><input type="hidden" name="csrf" value="{safe(token)}"><button class="button" type="submit">Sign out</button></form>
   </section>
 </main>""")

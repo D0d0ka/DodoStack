@@ -7,11 +7,15 @@
   <title>{{ message.subject if message else ("New message" if draft is not none else folders[folder]) }} · DodoMail</title>
   <link rel="icon" href="{{ url_for('logo') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='mail.css') }}">
+  <link rel="stylesheet" href="/static/account-menu.css">
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="{{ url_for('inbox') }}"><img src="{{ url_for('logo') }}" alt="" width="40" height="40">DodoMail</a>
-    <a class="button" href="{{ workspace_url }}/">← DodoStack</a>
+    <div class="topbar-actions">
+      <a class="button" href="{{ workspace_url }}/">← DodoStack</a>
+      {{ account_menu() }}
+    </div>
   </header>
   <main class="layout">
     <aside>
