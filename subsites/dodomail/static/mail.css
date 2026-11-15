@@ -57,6 +57,9 @@ button.primary:hover { background: #bfddff; }
     .address { margin: 0 0 .65rem; }
     .messages a { grid-template-columns: minmax(0, 1fr) auto; }
     .messages .subject { grid-row: 2; grid-column: 1 / -1; }
+    .mail { min-width: 0; }
+    nav a, .actions button, .actions .button { min-height: 44px; }
+    .draft input, .draft textarea { font-size: 16px; }
 }
 .button {
     display: inline-block;

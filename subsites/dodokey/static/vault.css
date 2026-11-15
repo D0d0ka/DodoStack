@@ -91,4 +91,6 @@ button.danger { color: #842d24; }
 @media (max-width: 700px) {
   .vault-layout { grid-template-columns: 1fr; }
   #editor { grid-row: 1; }
+  .vault-layout > * { min-width: 0; }
+  .topbar nav { justify-content: flex-end; margin-inline-start: auto; }
 }

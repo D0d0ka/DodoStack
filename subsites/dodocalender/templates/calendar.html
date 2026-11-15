@@ -21,7 +21,7 @@
 <div class="calendar-layout">
   <div class="calendar-scroll">
     <table class="month" aria-label="{{ month_name }} {{ selection.year }}">
-      <thead><tr>{% for weekday in ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun') %}<th scope="col">{{ weekday }}</th>{% endfor %}</tr></thead>
+      <thead><tr>{% for weekday in ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun') %}<th scope="col" aria-label="{{ weekday }}"><span class="weekday-label">{{ weekday }}</span><span class="weekday-short" aria-hidden="true">{{ weekday[:2] }}</span></th>{% endfor %}</tr></thead>
       <tbody>
       {% for week in weeks %}
         <tr>

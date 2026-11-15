@@ -71,6 +71,7 @@ h3 { font-size: 1rem; margin: 24px 0 8px; }
 .calendar-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
 .month { width: 100%; min-width: 540px; table-layout: fixed; border-spacing: 0; background: white; }
 .month th { padding: 10px 8px; font-size: .8rem; color: var(--muted); background: #edf2e9; }
+.weekday-short { display: none; }
 .month td { height: 106px; padding: 6px; vertical-align: top; border-top: 1px solid var(--line); }
 .month td + td { border-left: 1px solid var(--line); }
 .month td.empty { background: #f8faf6; }
@@ -129,4 +130,14 @@ textarea { resize: vertical; }
   .brand { font-size: .96rem; }
   .brand img { width: 34px; height: 34px; }
   .form-row, .custom-form { grid-template-columns: 1fr; }
+  .header-inner { flex-wrap: wrap; padding-block: 8px; }
+  .calendar-actions { flex-wrap: wrap; }
+  .month { min-width: 0; }
+  .month th { padding-inline: 2px; }
+  .weekday-label { display: none; }
+  .weekday-short { display: inline; }
+  .month td { height: 76px; padding: 3px; }
+  .day { width: 100%; }
+  .chip { padding-inline: 2px; }
+  .more { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }

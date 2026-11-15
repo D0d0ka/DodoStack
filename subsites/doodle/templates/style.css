@@ -2187,3 +2187,13 @@ body {
   font: inherit;
   cursor: pointer;
 }
+
+@media (max-width: 600px) {
+  .site-header { padding-inline: 12px; }
+  .site-header .header-inner { flex-wrap: wrap; gap: 8px; }
+  .doodle-account { margin-inline-start: auto; gap: .45rem; }
+  .doodle-account .dodo-account-menu > summary { max-inline-size: min(9rem, 36vw); }
+  .search-header-inner .header-search-box { min-width: 0; }
+  .header-search-box input[type="text"], .search-box input[type="text"] { min-width: 0; font-size: 16px; }
+  .header-search-box input[type="text"] { width: 0; padding-inline: 10px; }
+}

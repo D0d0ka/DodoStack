@@ -103,6 +103,8 @@ a.service-card:hover { border-color: #779665; }
   .hero img { width: 96px; }
   .auth-layout { grid-template-columns: 1fr; }
   .auth-art { display: none; }
+  .auth-card input, .account-row input { font-size: 16px; }
+  .account-row input { min-width: 0; max-width: 100%; }
 }
 .admin-accounts { margin-top: 24px; }
 .account-row { padding: 22px; }
