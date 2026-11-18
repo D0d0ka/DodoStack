@@ -66,6 +66,7 @@ def _enable_sqlite_extensions(conn: sqlite3.Connection) -> None:
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.create_function('domain_hidden', 2, _domain_hidden, deterministic=True)
     conn.execute('PRAGMA foreign_keys = ON')
     _enable_sqlite_extensions(conn)
     return conn
@@ -391,7 +392,7 @@ def get_hidden_domains() -> list[str]:
 
 
 def add_hidden_domain(domain: str) -> bool:
-    domain = (_extract_domain(domain) or domain.strip().lower()).strip()
+    domain = extract_domain(domain).rstrip('.')
     if not domain:
         return False
     conn = get_connection()
@@ -404,7 +405,7 @@ def add_hidden_domain(domain: str) -> bool:
 
 
 def remove_hidden_domain(domain: str) -> bool:
-    domain = domain.strip().lower()
+    domain = extract_domain(domain).rstrip('.')
     if not domain:
         return False
     conn = get_connection()
@@ -643,7 +644,7 @@ def get_recommended_for_query(query: str, limit: int = 12, hidden_domains: list[
             }
             for row in rows
             if (row['url'] or '').strip()
-            and _extract_domain((row['url'] or '').strip()).lower() not in hidden
+            and not any(_domain_hidden(row['url'], domain) for domain in hidden)
         ]
     finally:
         conn.close()
@@ -843,7 +844,7 @@ def search_media_pages(query: str, kind: str, limit: int = 20, hidden_domains: l
     hidden = set(d.strip().lower() for d in (hidden_domains or []) if d)
     results = [dict(item) for item in _search_media_pages_cached(normalized_query, safe_kind, safe_limit)]
     if hidden:
-        results = [r for r in results if _extract_domain(r.get('url') or '').lower() not in hidden]
+        results = [r for r in results if not any(_domain_hidden(r.get('url'), domain) for domain in hidden)]
     return results
 
 
@@ -921,7 +922,9 @@ def search_media_assets(query: str, kind: str, limit: int = 24, hidden_domains: 
     if hidden:
         results = [
             r for r in results
-            if _extract_domain(r.get('page_url') or r.get('source_url') or r.get('url') or '').lower() not in hidden
+            if not any(_domain_hidden(r.get(key), domain)
+                       for key in ('page_url', 'source_url', 'url', 'thumbnail_url', 'embed_url')
+                       for domain in hidden)
         ]
     return results
 
@@ -1158,7 +1161,7 @@ def _build_search_filter_sql(filters: dict, normalized_query: str, excluded_term
 
     for hidden in (filters.get('hidden_domains') or []):
         if hidden:
-            sql_parts.append('LOWER(COALESCE(domain, "")) != ?')
+            sql_parts.append('NOT domain_hidden(url, ?)')
             params.append(hidden)
 
     if filters.get('exact_phrase_only') and normalized_query:
@@ -1252,6 +1255,12 @@ def extract_domain(url: str) -> str:
     if '://' not in value and not value.startswith('//'):
         value = f'//{value}'
     return _extract_domain(value)
+
+
+def _domain_hidden(url: str, hidden_domain: str) -> bool:
+    host = extract_domain(url).rstrip('.')
+    domain = extract_domain(hidden_domain).rstrip('.')
+    return bool(domain and (host == domain or host.endswith('.' + domain)))
 
 
 def _content_hash(content: str) -> str:

@@ -302,7 +302,6 @@ def admin_accounts(accounts, tabs, token, message="", *, username, min_password_
         rows.append(f"""
 <section class="service-detail account-row">
   <h2>{name}</h2><p>{role} · {'Approved' if account["approved"] else 'Awaiting approval'}</p>
-  <p>{safe(account["email"] or "Email required")}</p>
   {approval}
   {'<p role="status">Password reset requested</p>' if account["password_reset_requested"] else ''}
   <form method="post" action="/admin/role">

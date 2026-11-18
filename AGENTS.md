@@ -29,4 +29,7 @@
 - The shared account dropdown uses same-origin `/static/account-menu.css`. Workspace menus use `/logout` and workspace CSRF. Service menus use `/_auth/logout` with a CSRF token tied to the service session. DodoTV uses its existing dropdown and logout form.
 - Returning an account to approval pending revokes its workspace and service sessions. Account deletion removes the shared account and its DodoMail rows in one transaction. Separate service stores still key their records by the old account ID. Keep shared account IDs non-reusable and preserve at least one approved administrator.
 - DodoBook’s mobile layout (up to 820px) opens on Feed with Chat to its left and Friends to its right. Keep the breakpoint in its template script and `subsites/dodobook/static/feed-layout.css` aligned. Restoring a saved chat must leave Feed active, and mobile chat polling should fetch messages only while Chat is visible.
-- If something in this file is outdated remove or update it.
+- If something in this file is outdated then remove or update it.
+- Doodle hidden domains include their subdomains and are visible to shared administrators on both service and workspace admin search routes. Filter media by both its page and asset domains. Never expose the hidden-domain filter list in ordinary search responses.
+- The admin account listing deliberately excludes real email addresses from both its SQL projection and rendered page. Keep the account owner's email settings separate from admin listings.
+- Run the isolated HTTP privacy regressions with `.venv/bin/python -m unittest discover -s tests -v`. Doodle deduplicates identical page content, so use distinct content when seeding multiple search-result fixtures.

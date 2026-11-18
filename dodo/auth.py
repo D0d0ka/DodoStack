@@ -203,7 +203,7 @@ class AccountStore:
 
     def list_accounts(self):
         with self.connect() as db:
-            return db.execute("SELECT id, username, email, is_admin, approved, password_reset_requested FROM users ORDER BY approved, username").fetchall()
+            return db.execute("SELECT id, username, is_admin, approved, password_reset_requested FROM users ORDER BY approved, username").fetchall()
 
     @staticmethod
     def require_other_admin(db, user):

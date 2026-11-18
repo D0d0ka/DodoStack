@@ -572,7 +572,7 @@ def search():
         'content_type': request.args.get('content_type', '').strip().lower(),
         'exact_phrase_only': (request.args.get('exact_phrase_only', '').strip().lower() in {'1', 'true', 'yes', 'on'}),
         'exclude': request.args.get('exclude', '').strip().lower(),
-        'hidden_domains': [] if _is_admin_request() else database.get_hidden_domains(),
+        'hidden_domains': [] if shared_admin() else database.get_hidden_domains(),
     }
 
     try:
@@ -581,6 +581,7 @@ def search():
         limit = 20
 
     if not q:
+        filters.pop('hidden_domains', None)
         return jsonify({'results': [], 'query': q, 'count': 0, 'page': page, 'page_size': limit, 'total': 0, 'total_pages': 0, 'has_more': False, 'sort': sort, 'filters': filters})
 
     database.record_search_query(q)
@@ -590,6 +591,7 @@ def search():
     results = page_data['results']
     hidden = filters.get('hidden_domains') or []
     recommended = database.get_recommended_for_query(q, limit=12, hidden_domains=hidden)
+    filters.pop('hidden_domains', None)
     for r in results:
         r.pop('score', None)
         r.pop('canonical_url', None)
@@ -623,7 +625,7 @@ def get_recommended():
     if not q:
         return jsonify({'query': q, 'results': [], 'count': 0, 'limit': limit})
 
-    hidden = [] if _is_admin_request() else database.get_hidden_domains()
+    hidden = [] if shared_admin() else database.get_hidden_domains()
     items = database.get_recommended_for_query(q, limit=limit, hidden_domains=hidden)
     return jsonify({'query': q, 'results': items, 'count': len(items), 'limit': limit})
 
@@ -644,7 +646,7 @@ def search_media():
     if not q:
         return jsonify({'results': [], 'query': q, 'count': 0, 'kind': kind, 'limit': limit})
 
-    hidden = [] if _is_admin_request() else database.get_hidden_domains()
+    hidden = [] if shared_admin() else database.get_hidden_domains()
     results = database.search_media_assets(q, kind, limit=limit, hidden_domains=hidden)
     for r in results:
         r.pop('score', None)
