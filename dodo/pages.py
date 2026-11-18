@@ -146,8 +146,9 @@ def dashboard(user, services, *, private=False, token=""):
         content = f"""
   {brand_logo(service)}
   <div><h3>{name}</h3><p>{safe(SERVICE_DESCRIPTIONS.get(service, 'Open this service with your Dodo account.'))}</p></div>"""
-        if user and url:
-            cards.append(f"""<a class="service-card" href="{safe(url)}">{content}
+        if not user or url:
+            destination = url if user else '/login'
+            cards.append(f"""<a class="service-card" href="{safe(destination)}">{content}
   <span class="arrow" aria-hidden="true">→</span>
 </a>""")
         else:
