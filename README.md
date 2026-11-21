@@ -133,7 +133,26 @@ To invite someone, open an event you own in Dodo Calender and enter their userna
 
 ## Add a service and admin tab
 
-Create an app module in `subsites/` and register it in `SERVICE_MODULES` in `server.py`. Use `Application` in `dodo/framework.py` for simple request handlers or `WebApplication` in `dodo/web.py` for templates, JSON, forms, and streaming.
+Create a Python app module in `subsites/<package>/` and add `service.json` in that directory. At each startup, DodoStack scans immediate subdirectories and starts every service with a manifest. Directories without a manifest are ignored. Invalid manifests and duplicate service IDs or CLI commands stop startup with the manifest path in the error. Restart after adding, removing or changing a service; no central service list needs editing.
+
+For `subsites/example/app.py`, use a manifest such as:
+
+```json
+{
+  "id": "example",
+  "name": "Example",
+  "description": "A short description for the workspace and Doodle.",
+  "entrypoint": "app:app",
+  "logo": "static/logo.png",
+  "search_aliases": ["example service"],
+  "admin_label": "Example",
+  "order": 100
+}
+```
+
+`id` is the service's lowercase hostname label and permission key. `entrypoint` is `module:attribute` relative to the service package; for example, `server:app` loads `subsites.example.server.app`. The PNG logo path is relative to the service directory. Names, descriptions, logos, Doodle search aliases and admin permission labels are read from these files. `search_aliases` defaults to an empty list and `order` to 100; equal orders sort by ID. Omit `admin_label` for services without administration. Existing account permissions keep their service IDs.
+
+Use `Application` in `dodo/framework.py` for simple request handlers or `WebApplication` in `dodo/web.py` for templates, JSON, forms, and streaming.
 
 ```python
 from dodo.web import WebApplication, admin_only, render_template
@@ -151,3 +170,5 @@ app.admin_tab("Example", "/management", endpoints=("management",))
 The tab and its routes appear automatically under `/admin/<service>` on the main server. Add admin actions to `endpoints` or use `prefixes=("admin.",)` for a whole admin blueprint. Use `assets` for explicitly allowed read-only dependencies such as stylesheets and media previews. Use `url_for()` for links and form actions, and include `{{ admin_navigation }}` in the service's admin template to show the shared tabs. Use `admin_only` to require the shared admin role. If a service explicitly exposes admin endpoints on its own hostname with `on_service=True`, its handlers must check the service roles.
 
 Public routes can use `require_login` and a service profile loader with the shared account. `Identity.issue_assertion()` and `verify_assertion()` are available for short-lived, service-scoped calls.
+
+Services can also declare local CLI commands in their manifest. For example, DodoTV declares `"commands": {"seed-tv-demo": {"handler": "app.demo:seed_demo_command", "help": "Generate the Dodo TV demo catalog"}}`. The server imports and calls the zero-argument handler inside the service's app context when available, and prints its return value if present. `set-admin` and `set-owner` remain reserved workspace commands.

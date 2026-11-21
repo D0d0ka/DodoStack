@@ -59,7 +59,7 @@
                 </form>
               {% else %}
                 <p>Invitation {{ message.invitation_status }}.</p>
-                {% if message.invitation_status == 'accepted' %}<a href="{{ calendar_url }}">Open calendar</a>{% endif %}
+                {% if message.invitation_status == 'accepted' and calendar_url %}<a href="{{ calendar_url }}">Open calendar</a>{% endif %}
               {% endif %}
             </section>
           {% endif %}

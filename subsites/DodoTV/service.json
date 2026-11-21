@@ -1,0 +1,20 @@
+{
+  "id": "dodotv",
+  "name": "Dodo TV",
+  "description": "Browse the catalog and keep track of what you watch.",
+  "entrypoint": "run:app",
+  "logo": "dodotv.png",
+  "search_aliases": [
+    "tv",
+    "movies",
+    "filmid"
+  ],
+  "admin_label": "Dodo TV",
+  "order": 50,
+  "commands": {
+    "seed-tv-demo": {
+      "handler": "app.demo:seed_demo_command",
+      "help": "Generate the Dodo TV demo catalog"
+    }
+  }
+}

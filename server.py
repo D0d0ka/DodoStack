@@ -3,8 +3,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote_to_bytes, urlsplit
 from http.cookies import SimpleCookie
+from contextlib import nullcontext
 import argparse
-import importlib
 from ipaddress import IPv4Address
 import logging
 import os
@@ -18,6 +18,7 @@ from time import perf_counter
 
 from dodo.auth import AccountStore, AuthRateLimit, Identity, can_admin, ADMIN_PERMISSIONS
 from dodo import pages
+from dodo.services import SERVICES
 from dodo.diagnostics import configure_logging, request_id
 from dodo.framework import Application, Response, redirect, request_from_handler, same_origin
 from dodo.web import WebApplication
@@ -57,28 +58,9 @@ accounts = AccountStore(
     min_password_length=int(os.environ.get("DODO_MIN_PASSWORD_LENGTH", "8")),
 )
 auth_rate_limit = AuthRateLimit()
-SERVICE_MODULES = {
-    "todo": "subsites.todo.app",
-    "doodle": "subsites.doodle.app",
-    "dodobook": "subsites.dodobook.server",
-    "dodotv": "subsites.DodoTV.run",
-    "dodokey": "subsites.dodokey.app",
-    "dodocalender": "subsites.dodocalender.app",
-    "dodomail": "subsites.dodomail.app",
-}
 workspace = Application("workspace", static_dir=BASE_DIR / "static")
-
-
-BRAND_FILES = {
-    "stack": BASE_DIR / "assets/server-icon.png",
-    "dodomail": BASE_DIR / "subsites/dodomail/static/dodomail.png",
-    "todo": BASE_DIR / "subsites/todo/static/images/dodo_sign.png",
-    "doodle": BASE_DIR / "subsites/doodle/templates/dodo.png",
-    "dodobook": BASE_DIR / "subsites/dodobook/static/dodobook.png",
-    "dodotv": BASE_DIR / "subsites/DodoTV/dodotv.png",
-    "dodokey": BASE_DIR / "subsites/dodokey/static/dodokey.png",
-    "dodocalender": BASE_DIR / "subsites/dodocalender/static/dodocalender.png",
-}
+BRAND_FILES = {"stack": BASE_DIR / "assets/server-icon.png",
+               **{key: service.logo for key, service in SERVICES.items()}}
 
 
 def workspace_static(request):
@@ -91,11 +73,15 @@ def workspace_static(request):
 
 sys.path.insert(0, str(BASE_DIR))
 service_apps = {}
-for service_name, module_name in SERVICE_MODULES.items():
+for service_name, definition in SERVICES.items():
     started = perf_counter()
-    module = importlib.import_module(module_name)
-    service_apps[service_name] = module.app
-    log.debug("Loaded service=%s module=%s duration_ms=%.2f", service_name, module_name,
+    app = definition.load_app()
+    if not isinstance(app, (Application, WebApplication)):
+        raise ValueError(f"{definition.directory / 'service.json'}: entrypoint must expose an Application or WebApplication")
+    if isinstance(app, WebApplication) and app.admin and not definition.admin_label:
+        raise ValueError(f"{definition.directory / 'service.json'}: admin_label is required for an administration tab")
+    service_apps[service_name] = app
+    log.debug("Loaded service=%s entrypoint=%s duration_ms=%.2f", service_name, definition.entrypoint,
               (perf_counter() - started) * 1000)
 
 
@@ -155,7 +141,7 @@ def host_routes(config):
     routes = {host: None for host in workspace_addresses}
     for host, (domain, port, secure) in workspace_addresses.items():
         quick_tunnel = domain.endswith(".trycloudflare.com")
-        services = {} if quick_tunnel else {name: f"{name}.{domain}" for name in SERVICE_MODULES}
+        services = {} if quick_tunnel else {name: f"{name}.{domain}" for name in SERVICES}
         identity = Identity(accounts, services, port, private=PRIVATE, workspace_host=host, secure=secure)
         identity.admin_tabs = admin_tabs
         routes[host] = (identity, None)
@@ -554,13 +540,19 @@ def main():
     role.add_argument("--remove", action="store_true")
     owner = commands.add_parser("set-owner", help="Set an existing shared account's owner role")
     owner.add_argument("username")
-    commands.add_parser("seed-tv-demo", help="Generate the Dodo TV demo catalog")
+    service_commands = {}
+    for service_id, definition in SERVICES.items():
+        for command, settings in definition.commands.items():
+            commands.add_parser(command, help=settings["help"])
+            service_commands[command] = (service_id, definition, settings["handler"])
     args = parser.parse_args()
-    if args.command == "seed-tv-demo":
-        from subsites.DodoTV.app.demo import seed_demo
-        with service_apps["dodotv"].app_context():
-            summary = seed_demo()
-        print(f"Demo catalog has {summary['total_movies']} movies and {summary['total_shows']} shows.")
+    if args.command in service_commands:
+        service_id, definition, handler = service_commands[args.command]
+        app = service_apps[service_id]
+        with app.app_context() if isinstance(app, WebApplication) else nullcontext():
+            result = definition.import_target(handler)()
+        if result is not None:
+            print(result)
         return
     if args.command in {"set-admin", "set-owner"}:
         try:

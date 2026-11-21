@@ -1,0 +1,14 @@
+{
+  "id": "doodle",
+  "name": "Doodle",
+  "description": "Search the web, media, and indexed sites.",
+  "entrypoint": "app:app",
+  "logo": "templates/dodo.png",
+  "search_aliases": [
+    "web search",
+    "veebiotsing",
+    "otsing"
+  ],
+  "admin_label": "Doodle",
+  "order": 30
+}

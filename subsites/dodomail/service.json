@@ -1,0 +1,14 @@
+{
+  "id": "dodomail",
+  "name": "DodoMail",
+  "description": "Read DodoStack mail, service updates, and calendar invitations.",
+  "entrypoint": "app:app",
+  "logo": "static/dodomail.png",
+  "search_aliases": [
+    "mail",
+    "email",
+    "e-post"
+  ],
+  "admin_label": "DodoMail Support",
+  "order": 10
+}

@@ -1,0 +1,13 @@
+{
+  "id": "dodobook",
+  "name": "DodoBook",
+  "description": "Share posts and chat with friends and groups.",
+  "entrypoint": "server:app",
+  "logo": "static/dodobook.png",
+  "search_aliases": [
+    "social network",
+    "sotsiaalvõrgustik"
+  ],
+  "admin_label": "DodoBook",
+  "order": 40
+}

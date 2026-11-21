@@ -5,21 +5,10 @@ from urllib.parse import urlencode
 
 from .diagnostics import request_id
 from .framework import Response, safe
+from .services import SERVICES
 
-SERVICE_DESCRIPTIONS = {
-    "dodomail": "Read DodoStack mail, service updates, and calendar invitations.",
-    "todo": "Plan tasks with projects, priorities, labels, and recurring dates.",
-    "doodle": "Search the web, media, and indexed sites.",
-    "dodobook": "Share posts and chat with friends and groups.",
-    "dodotv": "Browse the catalog and keep track of what you watch.",
-    "dodokey": "Store and manage your passwords in an encrypted vault.",
-    "dodocalender": "Plan personal events, see public holidays, and share events.",
-}
-SERVICE_NAMES = {
-    "dodomail": "DodoMail",
-    "doodle": "Doodle", "dodobook": "DodoBook", "dodotv": "Dodo TV",
-    "todo": "DodoTodo", "dodokey": "DodoKey", "dodocalender": "Dodo Calender",
-}
+SERVICE_DESCRIPTIONS = {key: service.description for key, service in SERVICES.items()}
+SERVICE_NAMES = {key: service.name for key, service in SERVICES.items()}
 
 
 def service_name(key):

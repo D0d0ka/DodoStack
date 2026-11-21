@@ -1,0 +1,14 @@
+{
+  "id": "todo",
+  "name": "DodoTodo",
+  "description": "Plan tasks with projects, priorities, labels, and recurring dates.",
+  "entrypoint": "app:app",
+  "logo": "static/images/dodo_sign.png",
+  "search_aliases": [
+    "to-do",
+    "tasks",
+    "ülesanded"
+  ],
+  "admin_label": null,
+  "order": 20
+}

@@ -44,6 +44,7 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(50, collation='NOCASE'), unique=True, nullable=False)
     bio = db.Column(db.Text, default='')
     profile_pic = db.Column(db.String(256), default='')
+    profile_completed = db.Column(db.Boolean, default=False, nullable=False)
     role = db.Column(db.String(20), default='user')      # user | moderator | admin
     last_seen = db.Column(db.DateTime, nullable=True)
     is_deleted = db.Column(db.Boolean, default=False, nullable=False)
@@ -263,6 +264,20 @@ def block_deleted_profile():
 
 
 app.profile_loader = profiles
+
+
+@app.before_request
+def require_profile_setup():
+    if (request.admin_mount or not current_user.is_authenticated
+            or current_user.is_deleted or current_user.profile_completed
+            or request.endpoint in {'static', 'profile', 'get_user_settings',
+                                    'update_user_settings', 'logout'}
+            or app.is_admin_endpoint(request.endpoint)):
+        return
+    if request.path.startswith('/api/'):
+        return jsonify({'success': False, 'message': 'Choose your DodoBook name first.',
+                        'setup_url': url_for('profile')}), 409
+    return redirect(url_for('profile'))
 
 
 @app.before_request
@@ -605,7 +620,7 @@ def createagroup():
 @app.route('/profile')
 @require_login
 def profile():
-    return render_template('usersettings.html')
+    return render_template('usersettings.html', onboarding=not current_user.profile_completed)
 
 
 @app.get('/adminboard')
@@ -667,10 +682,14 @@ def update_user_settings():
 
     pic = request.files.get('profilepic')
     if pic and pic.filename:
+        if not allowed_image(pic.filename):
+            db.session.rollback()
+            return jsonify({'success': False, 'message': 'Choose a PNG, JPG, GIF or WebP profile picture.'}), 400
         path = save_upload(pic, 'usericons')
         if path:
             current_user.profile_pic = path
 
+    current_user.profile_completed = True
     db.session.commit()
 
     return jsonify({
@@ -1299,6 +1318,12 @@ def moderator_delete_comment(comment_id):
 def init_db():
     with app.app_context():
         db.create_all()
+        # Existing profiles have already been in use; only new profiles need setup.
+        with db.engine.begin() as connection:
+            columns = {row[1] for row in connection.exec_driver_sql('PRAGMA table_info(user)')}
+            if 'profile_completed' not in columns:
+                connection.exec_driver_sql(
+                    'ALTER TABLE user ADD COLUMN profile_completed BOOLEAN NOT NULL DEFAULT 1')
         os.makedirs(os.path.join(UPLOAD_FOLDER, 'usericons'), exist_ok=True)
         os.makedirs(os.path.join(UPLOAD_FOLDER, 'chaticons'), exist_ok=True)
         os.makedirs(os.path.join(UPLOAD_FOLDER, 'postpictures'), exist_ok=True)

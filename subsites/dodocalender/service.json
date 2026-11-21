@@ -1,0 +1,15 @@
+{
+  "id": "dodocalender",
+  "name": "Dodo Calender",
+  "description": "Plan personal events, see public holidays, and share events.",
+  "entrypoint": "app:app",
+  "logo": "static/dodocalender.png",
+  "search_aliases": [
+    "calendar",
+    "kalender",
+    "Dodo Calendar",
+    "Dodo Kalender"
+  ],
+  "admin_label": "Dodo Calender",
+  "order": 70
+}

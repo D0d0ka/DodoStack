@@ -1094,3 +1094,9 @@ def seed_demo(with_admin: bool = False) -> dict:
         "total_shows": TVShow.query.count(),
         "total_episodes": Episode.query.count(),
     }
+
+
+def seed_demo_command():
+    """Local CLI entrypoint declared by DodoTV's service manifest."""
+    summary = seed_demo()
+    return f"Demo catalog has {summary['total_movies']} movies and {summary['total_shows']} shows."

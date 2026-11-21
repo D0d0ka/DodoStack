@@ -8,7 +8,6 @@ from dodo.web import (
     WebApplication, abort, admin_only, current_user, redirect, render_template, request,
     require_login, send_file, url_for, verify_form_token,
 )
-from subsites.dodocalender.app import calendar_database
 from .delivery import SUPPORT_ADDRESS
 
 app = WebApplication(__name__)
@@ -63,7 +62,8 @@ def mailbox(db, folder, message=None, *, personal=False, draft=None, error=""):
     return render_template("mailbox.html", folders=FOLDERS, folder=folder, address=address,
                            unread=unread, messages=messages, message=message, sender_name=service_name,
                            personal=personal, draft=draft, error=error, support_address=SUPPORT_ADDRESS,
-                           calendar_url=request.identity.service_url("dodocalender"))
+                           calendar_url=(request.identity.service_url("dodocalender")
+                                         if "dodocalender" in request.identity.services else None))
 
 
 @app.get("/")
@@ -227,6 +227,10 @@ def support():
 
 
 def respond_to_invitation(accounts, message_id, action):
+    if "dodocalender" not in request.identity.services:
+        abort(404)
+    # Optional integration: do not start the calendar while loading the mail app.
+    from subsites.dodocalender.app import calendar_database
     with calendar_database(accounts=accounts) as db:
         db.execute("BEGIN IMMEDIATE")
         invite = db.execute("""SELECT event_id, invitation_status FROM mail_store.mail_messages

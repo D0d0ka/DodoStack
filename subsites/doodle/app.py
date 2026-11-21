@@ -17,15 +17,9 @@ from .crawler import crawler_manager
 
 FRONTEND = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
 
-SERVICE_SEARCH_ALIASES = {
-    "dodomail": ("mail", "email", "e-post"),
-    "todo": ("to-do", "tasks", "ülesanded"),
-    "doodle": ("web search", "veebiotsing", "otsing"),
-    "dodobook": ("social network", "sotsiaalvõrgustik"),
-    "dodotv": ("tv", "movies", "filmid"),
-    "dodokey": ("password manager", "paroolihaldur"),
-    "dodocalender": ("calendar", "kalender", "Dodo Calendar", "Dodo Kalender"),
-}
+from dodo.services import SERVICES
+
+SERVICE_SEARCH_ALIASES = {key: service.search_aliases for key, service in SERVICES.items()}
 
 app = WebApplication(__name__)
 app.before_request(verify_form_token)

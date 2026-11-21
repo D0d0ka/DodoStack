@@ -18,10 +18,11 @@ import unicodedata
 
 from email_validator import EmailNotValidError, validate_email
 
-from subsites.dodomail.delivery import SUPPORT_ADDRESS, initialize as initialize_mail, welcome
+from .mail import SUPPORT_ADDRESS, initialize as initialize_mail, welcome
 
 from .framework import Request, Response, cookie_name, redirect
 from . import pages
+from .services import SERVICES
 
 log = logging.getLogger(__name__)
 
@@ -90,8 +91,7 @@ class DmailAddressTaken(ValueError):
 
 ADMIN_PERMISSIONS = {
     "accounts": "Accounts",
-    **{key: pages.SERVICE_NAMES[key] for key in ("doodle", "dodobook", "dodotv", "dodocalender")},
-    "dodomail": "DodoMail Support",
+    **{key: service.admin_label for key, service in SERVICES.items() if service.admin_label},
 }
 
 

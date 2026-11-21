@@ -4,7 +4,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta charset="UTF-8">
     <link rel="icon" href="/static/dodobook.png">
-    <title>User Settings - Dodobook</title>
+    <title>{{ 'Welcome to DodoBook' if onboarding else 'User Settings' }} - Dodobook</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='workspace-link.css') }}">
     <style>
         :root{--bg:#071428;--panel:#0b2742;--card:#0f3b61;--accent:#1e66b0;--muted:#234a6f;--text:#e6f2ff;--muted-text:#bcd4f2;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
@@ -44,14 +44,18 @@
 
     <main class="center">
         <div class="panel">
-            <h2 style="margin-top:0">User Settings</h2>
+            <h2 style="margin-top:0">{{ 'Welcome to DodoBook' if onboarding else 'User Settings' }}</h2>
+            {% if onboarding %}
+            <p>Choose the name your friends will see and add a profile picture. You can change these later in User Settings.</p>
+            {% endif %}
 
             <div class="success-box" id="successMessage">Changes saved successfully!</div>
+            <p id="settingsError" class="info-box" role="alert" hidden></p>
 
             <form id="settingsForm">
                 <div class="form-section">
                     <label for="username">DodoBook username</label>
-                    <input id="username" name="username" value="{{ current_user.username }}" maxlength="50" required>
+                    <input id="username" name="username" value="{{ current_user.username }}" maxlength="50" required autofocus>
                 </div>
 
                 <div class="form-section">
@@ -65,19 +69,24 @@
                         {% endif %}
                         <button type="button" class="pill" onclick="document.getElementById('profilepic').click()">Choose Picture</button>
                     </div>
+                    {% if onboarding %}<p>You can also keep the default icon.</p>{% endif %}
                 </div>
 
+                {% if not onboarding %}
                 <div class="form-section">
                     <div class="section-title">About You</div>
                     <label for="bio">Bio</label>
                     <textarea id="bio" name="bio" placeholder="Tell us about yourself...">{{ current_user.bio or '' }}</textarea>
                 </div>
+                {% endif %}
 
                 <div class="form-section">
                     <div class="actions-row">
-                        <button type="submit" class="pill">Save Changes</button>
+                        <button type="submit" class="pill">{{ 'Continue to DodoBook' if onboarding else 'Save Changes' }}</button>
+                        {% if not onboarding %}
                         <button type="button" class="pill pill-secondary" onclick="location.href='/'">Cancel</button>
                         <button type="button" class="pill pill-danger" onclick="confirmDelete()">Delete DodoBook profile</button>
+                        {% endif %}
                     </div>
                 </div>
             </form>
@@ -109,6 +118,10 @@
 
         document.getElementById('settingsForm').addEventListener('submit', function(e) {
             e.preventDefault();
+            const button = this.querySelector('button[type="submit"]');
+            const error = document.getElementById('settingsError');
+            error.hidden = true;
+            button.disabled = true;
             const formData = new FormData(this);
             const picFile = document.getElementById('profilepic').files[0];
             if (picFile) formData.set('profilepic', picFile);
@@ -117,13 +130,23 @@
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
+                        {% if onboarding %}
+                        location.href = {{ url_for('index') | tojson }};
+                        return;
+                        {% endif %}
                         const box = document.getElementById('successMessage');
                         box.style.display = 'block';
                         setTimeout(() => box.style.display = 'none', 3000);
                     } else {
-                        alert('Error: ' + (data.message || 'Could not save settings.'));
+                        error.textContent = data.message || 'Could not save settings.';
+                        error.hidden = false;
                     }
-                });
+                })
+                .catch(() => {
+                    error.textContent = 'Could not save settings. Please try again.';
+                    error.hidden = false;
+                })
+                .finally(() => { button.disabled = false; });
         });
     </script>
 </body>

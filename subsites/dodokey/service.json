@@ -1,0 +1,13 @@
+{
+  "id": "dodokey",
+  "name": "DodoKey",
+  "description": "Store and manage your passwords in an encrypted vault.",
+  "entrypoint": "app:app",
+  "logo": "static/dodokey.png",
+  "search_aliases": [
+    "password manager",
+    "paroolihaldur"
+  ],
+  "admin_label": null,
+  "order": 60
+}

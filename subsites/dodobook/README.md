@@ -4,6 +4,8 @@ DodoBook runs inside [DodoStack](../../README.md). Open [DodoBook](http://dodobo
 
 Sign in with your shared DodoStack account. Your email comes from that account. **User settings** lets you edit your DodoBook username, bio, and profile picture.
 
+On your first visit, DodoBook opens a welcome screen to choose your DodoBook name and an optional profile picture. Save to continue to the feed. This setup is remembered for your shared account across browsers; existing DodoBook profiles keep their current settings without repeating setup.
+
 Open **Moderation** from the DodoBook user menu. Administrators can assign DodoBook roles and delete posts and comments. Moderators can delete posts and comments they can see. DodoStack administrators can also open **Admin → DodoBook** in the workspace.
 
 DodoBook stores social data in `instance/dodobook.db` and files in `static/uploads/` under this directory.

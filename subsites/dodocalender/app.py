@@ -18,7 +18,7 @@ from dodo.web import (
     request, require_login, url_for, verify_form_token,
 )
 
-from subsites.dodomail.delivery import deliver
+from dodo.mail import deliver
 
 app = WebApplication(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024
