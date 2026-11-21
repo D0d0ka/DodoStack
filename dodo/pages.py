@@ -272,8 +272,8 @@ def sign_in_problem(service, message, service_url, origin):
 </main>""", origin=origin)
 
 
-def admin_navigation(tabs, selected=""):
-    links = [nav_link("Accounts", "/admin", selected == "accounts")]
+def admin_navigation(tabs, selected="", *, accounts=True):
+    links = [nav_link("Accounts", "/admin", selected == "accounts")] if accounts else []
     links.extend(nav_link(safe(label), url, selected == key) for key, (label, url) in tabs.items())
     return f"""
 <link rel="stylesheet" href="/static/admin-navigation.css">
@@ -282,13 +282,30 @@ def admin_navigation(tabs, selected=""):
 </nav>"""
 
 
-def admin_accounts(accounts, tabs, token, message="", *, username, min_password_length=8):
+def admin_accounts(accounts, tabs, token, message="", *, username, owner=False, permissions=None, min_password_length=8):
     rows = []
     for account in accounts:
         name = safe(account["username"])
-        role = "Administrator" if account["is_admin"] else "Member"
-        action = "Remove admin" if account["is_admin"] else "Make admin"
-        enabled = 0 if account["is_admin"] else 1
+        role_key = "owner" if account["is_owner"] else "admin" if account["is_admin"] else "member"
+        role = {"owner": "Owner", "admin": "Administrator", "member": "Member"}[role_key]
+        if not owner and account["is_admin"]:
+            rows.append(f'<section class="service-detail account-row"><h2>{name}</h2><p>{role}</p><p>Only an owner can manage this account.</p></section>')
+            continue
+        role_form = ""
+        if owner:
+            options = ''.join(f'<option value="{key}" {"selected" if key == role_key else ""}>{label}</option>'
+                              for key, label in (("member", "Member"), ("admin", "Administrator"), ("owner", "Owner")))
+            checks = ''.join(f'<label><input type="checkbox" name="permissions" value="{safe(key)}" '
+                             f'{"checked" if key in account["admin_permissions"] else ""}> {safe(label)}</label>'
+                             for key, label in (permissions or {}).items())
+            role_form = f"""<form method="post" action="/admin/role">
+              <input type="hidden" name="csrf" value="{token}">
+              <input type="hidden" name="username" value="{name}">
+              <label>Role<select name="role">{options}</select></label>
+              <fieldset class="admin-permissions"><legend>Administrator permissions</legend>
+                <p>Apply to the Administrator role. Owners have all permissions.</p>{checks}</fieldset>
+              <button class="button" type="submit">Save role and permissions</button>
+            </form>"""
         approval = f"""
 <form method="post" action="/admin/approve">
   <input type="hidden" name="csrf" value="{token}">
@@ -305,11 +322,7 @@ def admin_accounts(accounts, tabs, token, message="", *, username, min_password_
   <h2>{name}</h2><p>{role} · {'Approved' if account["approved"] else 'Awaiting approval'}</p>
   {approval}
   {'<p role="status">Password reset requested</p>' if account["password_reset_requested"] else ''}
-  <form method="post" action="/admin/role">
-    <input type="hidden" name="csrf" value="{token}">
-    <input type="hidden" name="username" value="{name}">
-    <button class="button" name="enabled" value="{enabled}">{action}</button>
-  </form>
+  {role_form}
   <form method="post" action="/admin/password">
     <input type="hidden" name="csrf" value="{token}">
     <input type="hidden" name="username" value="{name}">

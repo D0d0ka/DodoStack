@@ -19,6 +19,7 @@ from werkzeug.routing import Map, Rule
 from werkzeug.utils import redirect, send_file as _file, send_from_directory as _directory
 from werkzeug.wrappers import Request, Response
 
+from .auth import can_admin as identity_can_admin
 from .diagnostics import request_id
 from .framework import cookie_name
 from .pages import error_response
@@ -215,10 +216,12 @@ class WebApplication(Blueprint):
                     if not admin and admin_endpoint and not self.admin.on_service:
                         self.logger.debug("Endpoint is available only on the workspace admin mount")
                         raise NotFound()
+                    if admin_endpoint and not identity_can_admin(user, service):
+                        abort(403)
                     if user and self.profile_loader:
                         incoming.profile = self.profile_loader(user) or Guest()
                     elif user:
-                        incoming.profile = SharedProfile(user["id"], user["username"], bool(user["is_admin"]))
+                        incoming.profile = SharedProfile(user["id"], user["username"], identity_can_admin(user, service))
                     result = None
                     for callback in self.before:
                         result = callback()
@@ -300,7 +303,7 @@ def url_for(endpoint, **values):
 
 def render_template(name, **values):
     from .pages import admin_navigation
-    navigation = Markup(admin_navigation(request.identity.admin_tabs, request.service)) if request.admin_mount else ""
+    navigation = Markup(admin_navigation(request.identity.allowed_admin_tabs(request.shared_user), request.service, accounts=identity_can_admin(request.shared_user, "accounts"))) if request.admin_mount else ""
     context = {"admin_navigation": navigation, "url_for": url_for, "request": request, "current_user": current_user,
                "get_flashed_messages": get_flashed_messages, "csrf_token": csrf_token,
                "request_id": request_id.get(),
@@ -410,7 +413,7 @@ class WebForm(Form):
 
 
 def shared_admin():
-    return bool(request.shared_user and request.shared_user["is_admin"])
+    return identity_can_admin(request.shared_user, request.service)
 
 
 def admin_only(view):

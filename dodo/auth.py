@@ -88,6 +88,18 @@ class DmailAddressTaken(ValueError):
     pass
 
 
+ADMIN_PERMISSIONS = {
+    "accounts": "Accounts",
+    **{key: pages.SERVICE_NAMES[key] for key in ("doodle", "dodobook", "dodotv", "dodocalender")},
+    "dodomail": "DodoMail Support",
+}
+
+
+def can_admin(user, permission):
+    return bool(user and user.get("approved") and (user.get("is_owner") or (
+        user.get("is_admin") and permission in user.get("admin_permissions", []))))
+
+
 class AccountStore:
     def __init__(self, database: str | Path, secret: str, *, min_password_length=8):
         self.path = Path(database)
@@ -116,6 +128,14 @@ class AccountStore:
                 nonce TEXT PRIMARY KEY, expires INTEGER NOT NULL
             )""")
 
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
+            if "is_owner" not in columns:
+                db.execute("ALTER TABLE users ADD COLUMN is_owner INTEGER NOT NULL DEFAULT 0")
+                db.execute("ALTER TABLE users ADD COLUMN admin_permissions TEXT NOT NULL DEFAULT '[]'")
+                db.execute("UPDATE users SET admin_permissions=? WHERE is_admin=1",
+                           (json.dumps(list(ADMIN_PERMISSIONS)),))
+                db.execute("UPDATE users SET is_owner=1 WHERE id=(SELECT id FROM users "
+                           "WHERE is_admin=1 AND approved=1 ORDER BY id LIMIT 1)")
             initialize_mail(db)
 
     def redeem_ticket(self, nonce, expires):
@@ -183,52 +203,104 @@ class AccountStore:
             row = db.execute("SELECT id FROM users WHERE lower(email)=lower(?)", (email,)).fetchone()
         return row["id"] if row else None
 
+    @staticmethod
+    def account_roles(row):
+        return {**row, "is_admin": bool(row["is_admin"]), "is_owner": bool(row["is_owner"]),
+                "approved": bool(row["approved"]), "admin_permissions": json.loads(row["admin_permissions"])}
+
     def account(self, user_id):
         with self.connect() as db:
-            row = db.execute("SELECT id, username, email, is_admin, approved FROM users WHERE id=?", (user_id,)).fetchone()
-        return {**row, "is_admin": bool(row["is_admin"]), "approved": bool(row["approved"])} if row else None
+            row = db.execute("SELECT id, username, email, is_admin, is_owner, admin_permissions, approved FROM users WHERE id=?", (user_id,)).fetchone()
+        return self.account_roles(row) if row else None
 
     def set_admin(self, username, enabled):
+        """Trusted local CLI/bootstrap operation; browser changes use set_role."""
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            user = db.execute("SELECT id, is_admin, approved FROM users WHERE username=?", (username,)).fetchone()
+            user = db.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
             if not user:
                 raise ValueError("Unknown DodoStack account.")
             if not enabled:
-                self.require_other_admin(db, user)
-            if enabled:
-                db.execute("UPDATE users SET is_admin=1, approved=1 WHERE id=?", (user["id"],))
-            else:
-                db.execute("UPDATE users SET is_admin=0 WHERE id=?", (user["id"],))
+                self.require_other_owner(db, user)
+            owner = enabled and not db.execute("SELECT 1 FROM users WHERE is_owner=1 AND approved=1").fetchone()
+            db.execute("UPDATE users SET is_admin=?, is_owner=?, admin_permissions=?, approved=CASE WHEN ? THEN 1 ELSE approved END WHERE id=?",
+                       (enabled, bool(owner or (enabled and user["is_owner"])),
+                        json.dumps(list(ADMIN_PERMISSIONS) if enabled else []), enabled, user["id"]))
+
+    def set_owner(self, username):
+        """Trusted local CLI operation for assigning or recovering ownership."""
+        with self.connect() as db:
+            if not db.execute(
+                "UPDATE users SET is_owner=1, is_admin=1, approved=1, admin_permissions='[]' WHERE username=?",
+                (username,),
+            ).rowcount:
+                raise ValueError("Unknown DodoStack account.")
+
+    def set_role(self, actor_id, username, role, permissions):
+        if role not in {"member", "admin", "owner"} or not set(permissions) <= ADMIN_PERMISSIONS.keys():
+            raise ValueError("Choose a valid role and permissions.")
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if not db.execute("SELECT 1 FROM users WHERE id=? AND is_owner=1 AND approved=1", (actor_id,)).fetchone():
+                raise PermissionError
+            user = db.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+            if not user:
+                raise ValueError("Unknown DodoStack account.")
+            if role != "owner":
+                self.require_other_owner(db, user)
+            db.execute("UPDATE users SET is_admin=?, is_owner=?, admin_permissions=?, approved=CASE WHEN ? THEN 1 ELSE approved END WHERE id=?",
+                       (role != "member", role == "owner", json.dumps(sorted(set(permissions)) if role == "admin" else []),
+                        role != "member", user["id"]))
 
     def list_accounts(self):
         with self.connect() as db:
-            return db.execute("SELECT id, username, is_admin, approved, password_reset_requested FROM users ORDER BY approved, username").fetchall()
+            return [self.account_roles(row) for row in db.execute(
+                "SELECT id, username, is_admin, is_owner, admin_permissions, approved, password_reset_requested FROM users ORDER BY approved, username")]
 
     @staticmethod
-    def require_other_admin(db, user):
-        if user["is_admin"] and user["approved"] and not db.execute(
-            "SELECT 1 FROM users WHERE is_admin=1 AND approved=1 AND id<>?", (user["id"],)
+    def require_other_owner(db, user):
+        if user["is_owner"] and user["approved"] and not db.execute(
+            "SELECT 1 FROM users WHERE is_owner=1 AND approved=1 AND id<>?", (user["id"],)
         ).fetchone():
-            raise ValueError("Keep at least one approved administrator.")
+            raise ValueError("Keep at least one approved owner.")
+
+    @staticmethod
+    def account_manager(db, actor_id, user):
+        actor = db.execute("SELECT * FROM users WHERE id=?", (actor_id,)).fetchone()
+        if not actor or not can_admin(AccountStore.account_roles(actor), "accounts"):
+            raise PermissionError
+        if (user["is_admin"] or user["is_owner"]) and not actor["is_owner"]:
+            raise PermissionError
 
     def restrict_account(self, actor_id, account_id, *, delete):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            if not db.execute(
-                "SELECT 1 FROM users WHERE id=? AND is_admin=1 AND approved=1", (actor_id,)
-            ).fetchone():
-                raise PermissionError
-            user = db.execute("SELECT id, is_admin, approved FROM users WHERE id=?", (account_id,)).fetchone()
+            user = db.execute("SELECT * FROM users WHERE id=?", (account_id,)).fetchone()
             if not user:
                 raise ValueError("Unknown DodoStack account.")
-            self.require_other_admin(db, user)
+            self.account_manager(db, actor_id, user)
+            self.require_other_owner(db, user)
             if delete:
                 db.execute("DELETE FROM mail_messages WHERE recipient_id=?", (account_id,))
                 db.execute("DELETE FROM user_mail WHERE sender_id=? OR recipient_id=?", (account_id, account_id))
                 db.execute("DELETE FROM users WHERE id=?", (account_id,))
             elif user["approved"]:
                 db.execute("UPDATE users SET approved=0, session_version=session_version+1 WHERE id=?", (account_id,))
+
+    def manage_account(self, actor_id, username, *, password=None):
+        if password is not None:
+            self.validate_password(password)
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            user = db.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+            if not user:
+                raise ValueError("Unknown DodoStack account.")
+            self.account_manager(db, actor_id, user)
+            if password is None:
+                db.execute("UPDATE users SET approved=1 WHERE id=?", (user["id"],))
+            else:
+                db.execute("UPDATE users SET password_hash=?, session_version=session_version+1, password_reset_requested=0 WHERE id=?",
+                           (self.hash_password(password), user["id"]))
 
     def request_password_reset(self, username):
         with self.connect() as db:
@@ -353,6 +425,9 @@ class Identity:
         self.service_session = cookie_name("dodo_session", secure)
         self.service_flow = cookie_name("dodo_signin_flow", secure)
         self.form_session = cookie_name("dodo_form", secure)
+
+    def allowed_admin_tabs(self, user):
+        return {key: value for key, value in self.admin_tabs.items() if can_admin(user, key)}
 
     def form_token(self, request):
         session = request.cookies.get(self.main_session)

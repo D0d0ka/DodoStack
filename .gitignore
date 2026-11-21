@@ -9,3 +9,5 @@ instance/
 *.pem
 
 .DS_Store
+
+tests/

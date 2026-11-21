@@ -81,7 +81,8 @@ def _resolve_secret_key(app: WebApplication) -> None:
 
 
 def create_profile(account):
-    if not account["is_admin"] and not allow_registration():
+    from dodo.web import shared_admin
+    if not shared_admin() and not allow_registration():
         return None
     return User(
         username=profiles.username(account),

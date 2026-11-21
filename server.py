@@ -16,7 +16,7 @@ import sys
 from threading import BoundedSemaphore
 from time import perf_counter
 
-from dodo.auth import AccountStore, AuthRateLimit, Identity
+from dodo.auth import AccountStore, AuthRateLimit, Identity, can_admin, ADMIN_PERMISSIONS
 from dodo import pages
 from dodo.diagnostics import configure_logging, request_id
 from dodo.framework import Application, Response, redirect, request_from_handler, same_origin
@@ -183,6 +183,13 @@ def control_panel(request, identity):
         return redirect(destination)
     if admin and not user["is_admin"]:
         return Response.text("Administrator access required.", 403)
+    if admin and path == "/admin" and not can_admin(user, "accounts"):
+        tabs = identity.allowed_admin_tabs(user)
+        return redirect(next(iter(tabs.values()))[1]) if tabs else Response.text("No administration permissions assigned.", 403)
+    if admin and path == "/admin/role" and not user["is_owner"]:
+        return Response.text("Owner access required.", 403)
+    if admin and path != "/admin/role" and not can_admin(user, "accounts"):
+        return Response.text("Account administration permission required.", 403)
     token = identity.form_token(request)
     message = ""
     if path in {"/admin/pending", "/admin/delete"} and request.method != "POST":
@@ -195,7 +202,7 @@ def control_panel(request, identity):
                 accounts.set_email(user["id"], request.value("email"))
                 return redirect("/")
             if path == "/admin/approve":
-                accounts.approve(request.value("username"))
+                accounts.manage_account(user["id"], request.value("username"))
                 return redirect("/admin")
             if path in {"/admin/pending", "/admin/delete"}:
                 account_id = request.form.get("account_id", [""])[0]
@@ -204,13 +211,11 @@ def control_panel(request, identity):
                 accounts.restrict_account(user["id"], int(account_id), delete=path == "/admin/delete")
                 return redirect("/admin")
             if path == "/admin/role":
-                enabled = request.value("enabled")
-                if enabled not in {"0", "1"}:
-                    raise ValueError("Choose a valid role.")
-                accounts.set_admin(request.value("username"), enabled == "1")
+                accounts.set_role(user["id"], request.value("username"), request.value("role"),
+                                  request.form.get("permissions", []))
                 return redirect("/admin")
             if path == "/admin/password":
-                accounts.reset_password(request.value("username"), request.value("password"))
+                accounts.manage_account(user["id"], request.value("username"), password=request.value("password"))
                 return redirect("/admin")
             if path == "/account/password":
                 if not accounts.authenticate(user["username"], request.value("current")):
@@ -224,7 +229,8 @@ def control_panel(request, identity):
         except sqlite3.IntegrityError:
             message = "That email is already in use."
     if admin:
-        response = Response.html(pages.admin_accounts(accounts.list_accounts(), identity.admin_tabs, token, message,
+        response = Response.html(pages.admin_accounts(accounts.list_accounts(), identity.allowed_admin_tabs(user), token, message,
+                                                      owner=user["is_owner"], permissions=ADMIN_PERMISSIONS,
                                                       username=user["username"],
                                                       min_password_length=accounts.min_password_length))
     elif path == "/account/email":
@@ -351,7 +357,7 @@ class DodoHandler(BaseHTTPRequestHandler):
             elif destination := identity.account_destination(user):
                 log.debug("Admin gate requires account approval")
                 response = redirect(destination)
-            elif not user["is_admin"]:
+            elif not can_admin(user, service):
                 log.debug("Admin gate denied a non-admin account")
                 response = Response.text("Administrator access required.", 403)
             elif len(parts) == 3 or not parts[3]:
@@ -538,9 +544,11 @@ def tls_context():
 def main():
     parser = argparse.ArgumentParser(description="Run or configure DodoStack")
     commands = parser.add_subparsers(dest="command")
-    role = commands.add_parser("set-admin", help="Set a shared account's admin role")
+    role = commands.add_parser("set-admin", help="Set an admin role (the first administrator becomes owner)")
     role.add_argument("username")
     role.add_argument("--remove", action="store_true")
+    owner = commands.add_parser("set-owner", help="Set an existing shared account's owner role")
+    owner.add_argument("username")
     commands.add_parser("seed-tv-demo", help="Generate the Dodo TV demo catalog")
     args = parser.parse_args()
     if args.command == "seed-tv-demo":
@@ -549,10 +557,16 @@ def main():
             summary = seed_demo()
         print(f"Demo catalog has {summary['total_movies']} movies and {summary['total_shows']} shows.")
         return
-    if args.command == "set-admin":
+    if args.command in {"set-admin", "set-owner"}:
         try:
-            accounts.set_admin(args.username, not args.remove)
-            print(f"{args.username}: {'member' if args.remove else 'administrator'}")
+            if args.command == "set-owner":
+                accounts.set_owner(args.username)
+            else:
+                accounts.set_admin(args.username, not args.remove)
+            account = next(account for account in accounts.list_accounts()
+                           if account["username"].lower() == args.username.lower())
+            role_name = "owner" if account["is_owner"] else "administrator" if account["is_admin"] else "member"
+            print(f"{args.username}: {role_name}")
         except ValueError as error:
             parser.error(str(error))
         return
