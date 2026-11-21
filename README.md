@@ -49,6 +49,8 @@ DODO_PORT=8000
 DODO_WORKSPACE_HOSTS=dodoai,192.168.0.11=dodostack.home.arpa
 ```
 
+Set `DODO_LOCALHOST_ENABLED=false` to disable access through `localhost`, `127.0.0.1`, `0.0.0.0` and the service addresses under `.localhost`. It defaults to `true`. With localhost disabled, use an address registered in `DODO_WORKSPACE_HOSTS`. This setting controls hostname routing; `DODO_HOST` still controls the listener, including connections from a local reverse proxy. Restart after changing it.
+
 Restart with `.venv/bin/python server.py`. In this example, the workspace opens at `http://dodoai:8000`, `http://192.168.0.11:8000`, and `http://dodostack.home.arpa:8000`. The domain after `=` is automatically registered as a workspace on the same browser-facing port. Both the IP and domain workspaces link to the same services. Those services use the domain workspace for sign-in.
 
 Configure DNS or the client device's hosts file so that the service domain and its service subdomains resolve to the server. For example, on the LAN you can add this hosts-file entry:

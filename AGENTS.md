@@ -7,6 +7,9 @@
 - DodoKey encrypts and decrypts vault entries in the browser. Keep vault passwords, derived keys, and unencrypted entries out of requests, logs, and persistent browser storage. Keep scripts and styles local to DodoKey.
 - Verify changes through the normal workspace and service routes. Check signed-out access and account isolation when editing authentication or personal data.
 - Use .venv as python environment.
+- DodoTV movie and episode forms import individual YouTube URLs through `app/utils/youtube.py` using yt-dlp and FFmpeg. Imports use temporary storage, validate files through the normal media helpers, and track new files for rollback. Replacing a video through YouTube also replaces its subtitles; manually added captions take priority over automatic captions in the same language.
+- Run the isolated DodoTV import regressions with `.venv/bin/python -m unittest discover -s checks -p test_dodotv_youtube.py -v`; they use temporary databases and stub YouTube downloads while validating real media with FFmpeg/FFprobe.
+- `DODO_LOCALHOST_ENABLED` defaults to `true`. Set it to `false` to disable workspace routes for localhost, 127.0.0.1 and 0.0.0.0 plus service routes under `.localhost`; configure `DODO_WORKSPACE_HOSTS` for access instead. `DODO_HOST` independently controls the listener, so local reverse proxies can still connect. Restart after changes.
 - Always when you learn something new about this project that would help in developing it later write it into this file.
 - Use a referrer policy such as `strict-origin` for native POST forms. With `no-referrer`, browsers send `Origin: null` and the shared origin check rejects the form.
 - An HTTP reverse proxy should preserve the browser's Host header. Register each proxy workspace as `host:port` in `DODO_WORKSPACE_HOSTS` when the browser port differs from `DODO_PORT`. Workspace and service redirects use the configured browser port.

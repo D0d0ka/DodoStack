@@ -128,11 +128,19 @@
 
     const fileInputs = Array.from(form.querySelectorAll('input[type="file"]'));
     const files = fileInputs.flatMap((input) => Array.from(input.files || []));
-    if (!files.length) return;
+    const youtubeImport = Boolean(form.querySelector('[name="youtube_url"]')?.value.trim());
+    if (!files.length && !youtubeImport) return;
 
     event.preventDefault();
     const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
     openOverlay();
+    const showDownloadStatus = () => {
+      if (titleLabel) titleLabel.textContent = "Downloading from YouTube…";
+      if (statusLabel) statusLabel.textContent = "Downloading video and selected media, then generating preview frames";
+      if (percentLabel) percentLabel.textContent = "Please wait";
+      if (noteLabel) noteLabel.textContent = "Keep this tab open. Long videos can take several minutes.";
+    };
+    if (youtubeImport) showDownloadStatus();
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", form.action || window.location.href, true);
@@ -147,6 +155,10 @@
         statusLabel.textContent = `${humanSize(progressEvent.loaded)} of ${humanSize(progressEvent.total)} uploaded`;
       }
       if (percent >= 100) {
+        if (youtubeImport) {
+          showDownloadStatus();
+          return;
+        }
         if (titleLabel) titleLabel.textContent = "Processing media…";
         if (statusLabel) statusLabel.textContent = "Upload complete · analysing video and generating frames";
         if (noteLabel) {

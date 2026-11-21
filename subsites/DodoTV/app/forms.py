@@ -39,6 +39,7 @@ AGE_RATINGS = [
 ]
 
 SUBTITLE_LANGUAGES = [
+    ("et", "Estonian"),
     ("en", "English"),
     ("es", "Spanish"),
     ("fr", "French"),
@@ -57,7 +58,38 @@ SUBTITLE_LANGUAGES = [
     ("zh", "Chinese"),
 ]
 
-class MovieForm(WebForm):
+class YouTubeForm(WebForm):
+    youtube_url = StringField("YouTube video URL", validators=[Optional(), Length(max=2048)])
+    youtube_thumbnail = BooleanField("Download the YouTube thumbnail", default=True)
+    youtube_subtitles = SelectField("Subtitle languages", choices=[
+        ("none", "No subtitles"), ("selected", "Selected languages"), ("all", "All available languages"),
+    ], default="none")
+    youtube_languages = StringField("Language codes", validators=[Length(max=200)])
+    youtube_subtitle_source = SelectField("Subtitle source", choices=[
+        ("manual", "Manually added"), ("auto", "Automatic"), ("both", "Both (prefer manually added)"),
+    ], default="both")
+
+    def validate_youtube_url(self, field):
+        if not field.data:
+            return
+        from .utils.youtube import youtube_url
+        from .utils.media import MediaError
+        try:
+            field.data = youtube_url(field.data)
+        except MediaError as exc:
+            raise ValidationError(str(exc)) from None
+        if self.video.data:
+            raise ValidationError("Choose a video upload or a YouTube URL, not both.")
+
+    def validate_youtube_languages(self, field):
+        if self.youtube_url.data and self.youtube_subtitles.data == "selected":
+            codes = [code.strip() for code in (field.data or "").split(",")]
+            import re
+            if not codes or any(not re.fullmatch(r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", code) for code in codes):
+                raise ValidationError("Enter comma-separated language codes, such as et, en, de.")
+
+
+class MovieForm(YouTubeForm):
     title = StringField("Title", validators=[DataRequired(), Length(max=255)])
     creator = StringField("Creator or production company", validators=[Optional(), Length(max=255)])
     description = TextAreaField("Description", validators=[Optional(), Length(max=8000)])
@@ -104,7 +136,7 @@ class SeasonForm(WebForm):
             raise ValidationError("Season number must be between 0 and 99.")
 
 
-class EpisodeForm(WebForm):
+class EpisodeForm(YouTubeForm):
     season_id = SelectField("Season", coerce=int, validators=[DataRequired()])
     number = IntegerField("Episode number", validators=[DataRequired(), NumberRange(min=1, max=999)])
     title = StringField("Episode title", validators=[DataRequired(), Length(max=255)])

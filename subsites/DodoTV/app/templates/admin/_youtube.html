@@ -1,0 +1,15 @@
+<section class="admin-panel" data-youtube-options>
+  <div class="admin-section">
+    <h2>Import from YouTube</h2>
+    <p>Paste a video link instead of uploading a video file. Saving downloads the video into DodoTV. On an existing title, this replaces the video and its subtitles.</p>
+  </div>
+  {{ field(form.youtube_url, placeholder="https://www.youtube.com/watch?v=…") }}
+  {{ checkbox(form.youtube_thumbnail, 'Use the YouTube image as the poster / thumbnail. An uploaded image takes priority.') }}
+  <div class="form-grid">
+    {{ field(form.youtube_subtitles) }}
+    {{ field(form.youtube_subtitle_source) }}
+  </div>
+  {{ field(form.youtube_languages, placeholder="et, en, de") }}
+  <p class="field-hint">For selected languages, enter comma-separated language codes. If both sources have the same language, manually added subtitles take priority. Availability depends on the video.</p>
+  <p class="field-hint">Keep this tab open while downloading. Long videos can take several minutes.</p>
+</section>

@@ -68,6 +68,7 @@ from ..utils.media import (
     upload_root,
 )
 from .media import can_view_movie, can_view_show
+from ..utils.youtube import download_youtube
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -165,6 +166,34 @@ def _delete_paths_after_commit(paths: list[str]) -> None:
         delete_relative(path)
 
 
+def _import_youtube(owner, form, category, new_files, old_files):
+    if not form.youtube_url.data:
+        return False
+    imported = download_youtube(form, category, new_files)
+    if owner.video_path:
+        old_files.append(owner.video_path)
+    old_files.extend(_remove_frames(owner))
+    owner.video_path = imported['video']
+    if not form.runtime.data:
+        owner.runtime = max(1, int(round(imported['duration'])))
+    poster_field = 'poster_path' if isinstance(owner, Movie) else 'thumbnail_path'
+    if imported['thumbnail']:
+        previous = getattr(owner, poster_field)
+        if previous:
+            old_files.append(previous)
+        setattr(owner, poster_field, imported['thumbnail'])
+    # A replacement video's subtitle timing belongs to the new video.
+    for subtitle in list(owner.subtitles):
+        old_files.append(subtitle.file_path)
+        db.session.delete(subtitle)
+    owner.subtitles.clear()
+    for track in imported['subtitles']:
+        owner.subtitles.append(Subtitle(**track, is_default=False))
+    for warning in imported['warnings']:
+        flash(warning, 'warning')
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
@@ -258,7 +287,7 @@ def movie_new():
         try:
             movie = Movie()
             _populate_movie(movie, form)
-            video_uploaded = False
+            video_uploaded = _import_youtube(movie, form, "movies", new_files, [])
             if form.video.data:
                 relative, info = save_video(form.video.data, "movies", "movie video")
                 new_files.append(relative)
@@ -282,6 +311,7 @@ def movie_new():
             if video_uploaded:
                 try:
                     frames = generate_frames(movie.video_path, f"movie_{movie.id}")
+                    new_files.extend(frame["path"] for frame in frames)
                     add_frames_to_db(movie, frames)
                 except MediaError as exc:
                     flash(f"Movie saved, but preview frames failed: {exc}", "warning")
@@ -329,7 +359,7 @@ def movie_edit(movie_id: int):
         old_files: list[str] = []
         new_files: list[str] = []
         try:
-            video_replaced = False
+            video_replaced = _import_youtube(movie, form, "movies", new_files, old_files)
             if form.video.data:
                 relative, info = save_video(form.video.data, "movies", "movie video")
                 new_files.append(relative)
@@ -358,6 +388,7 @@ def movie_edit(movie_id: int):
             if video_replaced:
                 try:
                     frames = generate_frames(movie.video_path, f"movie_{movie.id}")
+                    new_files.extend(frame["path"] for frame in frames)
                     add_frames_to_db(movie, frames)
                 except MediaError as exc:
                     flash(f"Video replaced, but preview frames failed: {exc}", "warning")
@@ -381,6 +412,11 @@ def movie_edit(movie_id: int):
             for path in new_files:
                 delete_relative(path)
             flash("That change conflicts with an existing record.", "error")
+        except Exception:
+            db.session.rollback()
+            for path in new_files:
+                delete_relative(path)
+            raise
 
     elif request.method == "POST":
         for errors in form.errors.values():
@@ -1039,7 +1075,7 @@ def episode_new(show_id: int):
             )
             if form.runtime.data:
                 episode.runtime = int(form.runtime.data) * 60
-            video_uploaded = False
+            video_uploaded = _import_youtube(episode, form, "episodes", new_files, [])
             if form.video.data:
                 relative, info = save_video(form.video.data, "episodes", "episode video")
                 new_files.append(relative)
@@ -1056,6 +1092,7 @@ def episode_new(show_id: int):
             if video_uploaded:
                 try:
                     frames = generate_frames(episode.video_path, f"episode_{episode.id}")
+                    new_files.extend(frame["path"] for frame in frames)
                     add_frames_to_db(episode, frames)
                 except MediaError as exc:
                     flash(f"Episode saved, but preview frames failed: {exc}", "warning")
@@ -1114,6 +1151,7 @@ def episode_edit(episode_id: int):
         old_files: list[str] = []
         new_files: list[str] = []
         try:
+            video_replaced = _import_youtube(episode, form, "episodes", new_files, old_files)
             if form.video.data:
                 relative, info = save_video(form.video.data, "episodes", "episode video")
                 new_files.append(relative)
@@ -1121,6 +1159,7 @@ def episode_edit(episode_id: int):
                     old_files.append(episode.video_path)
                 old_files.extend(_remove_frames(episode))
                 episode.video_path = relative
+                video_replaced = True
                 if not form.runtime.data:
                     episode.runtime = max(1, int(round(info["duration"])))
             if form.thumbnail.data:
@@ -1144,9 +1183,10 @@ def episode_edit(episode_id: int):
                     episode.published = False
                     _flash_problems(problems, "Episode")
 
-            if form.video.data:
+            if video_replaced:
                 try:
                     frames = generate_frames(episode.video_path, f"episode_{episode.id}")
+                    new_files.extend(frame["path"] for frame in frames)
                     add_frames_to_db(episode, frames)
                 except MediaError as exc:
                     flash(f"Video replaced, but preview frames failed: {exc}", "warning")
@@ -1165,6 +1205,11 @@ def episode_edit(episode_id: int):
             for path in new_files:
                 delete_relative(path)
             flash("That episode number conflicts with another episode in the season.", "error")
+        except Exception:
+            db.session.rollback()
+            for path in new_files:
+                delete_relative(path)
+            raise
 
     elif request.method == "POST":
         for errors in form.errors.values():

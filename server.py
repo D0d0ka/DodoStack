@@ -36,6 +36,10 @@ HTTPS = os.environ.get("DODO_HTTPS", "false").strip().lower()
 if HTTPS not in {"true", "false", "1", "0", "yes", "no", "on", "off"}:
     raise SystemExit("DODO_HTTPS expects true or false.")
 HTTPS = HTTPS in {"true", "1", "yes", "on"}
+LOCALHOST_ENABLED = os.environ.get("DODO_LOCALHOST_ENABLED", "true").strip().lower()
+if LOCALHOST_ENABLED not in {"true", "false", "1", "0", "yes", "no", "on", "off"}:
+    raise SystemExit("DODO_LOCALHOST_ENABLED expects true or false.")
+LOCALHOST_ENABLED = LOCALHOST_ENABLED in {"true", "1", "yes", "on"}
 PRIVATE = os.environ.get("DODO_PRIVATE", "false").strip().lower() in {"true", "1", "yes", "on"}
 INSTANCE = BASE_DIR / "instance"
 INSTANCE.mkdir(exist_ok=True)
@@ -110,7 +114,7 @@ def valid_hostname(host):
 
 def host_routes(config):
     local_hosts = ("localhost", "127.0.0.1", "0.0.0.0")
-    workspace_addresses = {"localhost": ("localhost", PORT, HTTPS)}
+    workspace_addresses = {"localhost": ("localhost", PORT, HTTPS)} if LOCALHOST_ENABLED else {}
     for entry in config.lower().split(","):
         if not entry.strip():
             continue
@@ -133,7 +137,7 @@ def host_routes(config):
                 raise ValueError(f"Invalid DODO_WORKSPACE_HOSTS address: {host}")
         if domain.split(".")[-1].isdigit():
             raise ValueError(f"Set a DNS service domain for {host} using {host}=example.home.arpa")
-        if host in local_hosts or host in workspace_addresses:
+        if host in local_hosts or domain in local_hosts or host in workspace_addresses:
             raise ValueError(f"Duplicate or reserved DodoStack workspace hostname: {host}")
         if domain.endswith(".trycloudflare.com") and host != domain:
             raise ValueError("A Quick Tunnel hostname must be configured as its own workspace.")
@@ -148,7 +152,7 @@ def host_routes(config):
         if workspace_addresses.setdefault(domain, address) != address:
             raise ValueError(f"Conflicting DodoStack workspace settings for service domain: {domain}")
 
-    routes = {host: None for host in (*local_hosts, *workspace_addresses)}
+    routes = {host: None for host in workspace_addresses}
     for host, (domain, port, secure) in workspace_addresses.items():
         quick_tunnel = domain.endswith(".trycloudflare.com")
         services = {} if quick_tunnel else {name: f"{name}.{domain}" for name in SERVICE_MODULES}
@@ -161,8 +165,9 @@ def host_routes(config):
             if address in routes or not valid_hostname(address):
                 raise ValueError(f"Duplicate or invalid DodoStack service hostname: {address}")
             routes[address] = (identity, name)
-    for host in local_hosts[1:]:
-        routes[host] = routes["localhost"]
+    if LOCALHOST_ENABLED:
+        for host in local_hosts[1:]:
+            routes[host] = routes["localhost"]
     return routes
 
 
