@@ -59,6 +59,13 @@ class Profiles:
         )
 
     def __call__(self, account):
+        # Existing profiles need no global creation lock. Recheck after acquiring
+        # the lock only when creating a first-time link.
+        link = self.db.session.execute(sa.select(self.links.c.profile_id).where(
+            self.links.c.account_id == account["id"],
+        )).first()
+        if link is not None:
+            return self.db.session.get(self.model, link.profile_id) if link.profile_id else None
         with self.lock:
             link = self.db.session.execute(sa.select(self.links.c.profile_id).where(
                 self.links.c.account_id == account["id"],

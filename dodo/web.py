@@ -253,6 +253,9 @@ class WebApplication(Blueprint):
                 response = as_response(result)
                 for callback in self.after:
                     response = callback(response)
+                # HTML and API responses may contain personal data or CSRF
+                # tokens. File handlers retain their explicit caching policy.
+                response.headers.setdefault("Cache-Control", "no-store")
                 if incoming.ui != original:
                     response.set_cookie(name, serializer.dumps(incoming.ui), httponly=True,
                                         samesite="Lax", secure=identity.secure)

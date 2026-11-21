@@ -21,6 +21,8 @@ USER_MAIL = """SELECT mail.*, sender.dmail_address AS sender_address,
     LEFT JOIN users AS sender ON sender.id=mail.sender_id
     LEFT JOIN users AS recipient ON recipient.id=mail.recipient_id"""
 
+# Inbox rows never need message bodies or invitation payloads.
+USER_MAIL_SUMMARIES = USER_MAIL.replace('mail.*', 'mail.id, mail.subject, mail.created_at, mail.is_read')
 
 
 @app.after_request
@@ -54,7 +56,7 @@ def mailbox(db, folder, message=None, *, personal=False, draft=None, error=""):
                 messages.append(dict(row) | {"label": service_name(row["sender"])})
         condition, values = ("mail.sender_id=?", (account_id,)) if folder == "sent" else (
             "mail.recipient_id=? AND mail.folder=?", (account_id, folder))
-        for row in db.execute(USER_MAIL + " WHERE " + condition, values):
+        for row in db.execute(USER_MAIL_SUMMARIES + " WHERE " + condition, values):
             label = row["recipient_address"] if folder == "sent" else row["sender_address"]
             messages.append(dict(row) | {"label": label or SUPPORT_ADDRESS, "personal": True,
                                          "is_read": folder == "sent" or row["is_read"]})

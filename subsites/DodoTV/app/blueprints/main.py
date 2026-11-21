@@ -182,7 +182,8 @@ def browse():
             query = query.filter(Movie.genres.any(Genre.id == genre.id))
         if year:
             query = query.filter(Movie.release_year == year)
-        entries.extend(query.order_by(Movie.id))
+        entries.extend(('movie', row) for row in query.with_entities(
+            Movie.id, Movie.title, Movie.created_at, Movie.release_year).order_by(Movie.id))
 
     if content_type in {"all", "show"}:
         query = TVShow.query.filter(TVShow.published.is_(True))
@@ -197,7 +198,8 @@ def browse():
             query = query.filter(TVShow.genres.any(Genre.id == genre.id))
         if year:
             query = query.filter(TVShow.release_year == year)
-        entries.extend(query.order_by(TVShow.id))
+        entries.extend(('show', row) for row in query.with_entities(
+            TVShow.id, TVShow.title, TVShow.created_at, TVShow.release_year).order_by(TVShow.id))
 
     sort_keys = {
         "recent": lambda item: item.created_at,
@@ -205,7 +207,7 @@ def browse():
         "title": lambda item: item.title.lower(),
         "year": lambda item: item.release_year or 0,
     }
-    entries.sort(key=sort_keys[sort], reverse=sort in {"recent", "year"})
+    entries.sort(key=lambda entry: sort_keys[sort](entry[1]), reverse=sort in {"recent", "year"})
 
     page = max(1, request.args.get("page", 1, type=int))
     per_page = max(1, current_app.config["ITEMS_PER_PAGE"])
@@ -213,10 +215,17 @@ def browse():
     pages = max(1, math.ceil(total / per_page))
     page = min(page, pages)
     start = (page - 1) * per_page
-    cards = [
-        movie_card(item) if isinstance(item, Movie) else show_card(item)
-        for item in entries[start : start + per_page]
-    ]
+    # Sort compact metadata with the existing Unicode/tie semantics; hydrate
+    # descriptions and relationships only for the page being displayed.
+    selected = entries[start : start + per_page]
+    movies = {item.id: item for item in Movie.query.filter(
+        Movie.id.in_([row.id for kind, row in selected if kind == 'movie'])).all()} if any(
+            kind == 'movie' for kind, _ in selected) else {}
+    shows = {item.id: item for item in TVShow.query.filter(
+        TVShow.id.in_([row.id for kind, row in selected if kind == 'show'])).all()} if any(
+            kind == 'show' for kind, _ in selected) else {}
+    cards = [movie_card(movies[row.id]) if kind == 'movie' else show_card(shows[row.id])
+             for kind, row in selected]
 
     years = sorted(
         {

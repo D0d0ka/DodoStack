@@ -9,6 +9,8 @@ from dodo.web import (
 from dodo.orm import Database, Profiles
 from werkzeug.utils import secure_filename
 from markupsafe import Markup, escape as html_escape
+from collections import defaultdict
+from sqlalchemy.orm import joinedload
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 import os
@@ -536,27 +538,41 @@ def index():
     groups = current_user.get_groups()
 
     pending_requests = (Friendship.query
+                        .options(joinedload(Friendship.requester))
                         .filter_by(addressee_id=current_user.id, status='pending')
                         .all())
     group_invitations = (GroupMember.query
+                         .options(joinedload(GroupMember.group))
                          .filter_by(user_id=current_user.id, status='invited')
                          .all())
 
     posts = (visible_posts(friends)
+             .options(joinedload(Post.author))
              .order_by(Post.created_at.desc())
              .limit(50)
              .all())
-
-    post_data = []
-    for post in posts:
-        user_liked = (Like.query
-                      .filter_by(user_id=current_user.id, post_id=post.id)
-                      .first() is not None)
-        post_data.append({
-            'post': post,
-            'user_liked': user_liked,
-            'like_count': post.likes.count(),
-        })
+    post_ids = [post.id for post in posts]
+    extras = {name: defaultdict(list) for name in ('images', 'files', 'video_links', 'comments')}
+    likes = {}
+    liked = set()
+    if post_ids:
+        for name, model, order in (
+            ('images', PostImage, PostImage.order),
+            ('files', PostFile, PostFile.order),
+            ('video_links', PostVideoLink, PostVideoLink.order),
+            ('comments', Comment, Comment.created_at),
+        ):
+            query = model.query.filter(model.post_id.in_(post_ids)).order_by(order)
+            if model is Comment:
+                query = query.options(joinedload(Comment.author))
+            for item in query.all():
+                extras[name][item.post_id].append(item)
+        likes = dict(db.session.query(Like.post_id, db.func.count(Like.id))
+                     .filter(Like.post_id.in_(post_ids)).group_by(Like.post_id).all())
+        liked = {post_id for (post_id,) in db.session.query(Like.post_id)
+                 .filter(Like.post_id.in_(post_ids), Like.user_id == current_user.id).all()}
+    post_data = [dict(post=post, user_liked=post.id in liked, like_count=likes.get(post.id, 0),
+                      **{name: values[post.id] for name, values in extras.items()}) for post in posts]
 
     return render_template(
         'index.html',
@@ -1247,29 +1263,30 @@ def get_unread_counts():
     unread = {}
     friends = current_user.get_friends()
 
-    for friend in friends:
-        clr = ChatLastRead.query.filter_by(
-            user_id=current_user.id, chat_type='direct', chat_id=friend.id).first()
-        last_id = clr.last_read_id if clr else 0
-        count = DirectMessage.query.filter(
-            DirectMessage.receiver_id == current_user.id,
-            DirectMessage.sender_id == friend.id,
-            DirectMessage.id > last_id
-        ).count()
-        if count:
-            unread[f'direct_{friend.id}'] = count
-
-    for group in current_user.get_groups():
-        clr = ChatLastRead.query.filter_by(
-            user_id=current_user.id, chat_type='group', chat_id=group.id).first()
-        last_id = clr.last_read_id if clr else 0
-        count = GroupMessage.query.filter(
-            GroupMessage.group_id == group.id,
-            GroupMessage.user_id != current_user.id,
-            GroupMessage.id > last_id
-        ).count()
-        if count:
-            unread[f'group_{group.id}'] = count
+    friend_ids = [friend.id for friend in friends]
+    if friend_ids:
+        direct = (db.session.query(DirectMessage.sender_id, db.func.count(DirectMessage.id))
+                  .outerjoin(ChatLastRead, db.and_(
+                      ChatLastRead.user_id == current_user.id,
+                      ChatLastRead.chat_type == 'direct',
+                      ChatLastRead.chat_id == DirectMessage.sender_id))
+                  .filter(DirectMessage.receiver_id == current_user.id,
+                          DirectMessage.sender_id.in_(friend_ids),
+                          DirectMessage.id > db.func.coalesce(ChatLastRead.last_read_id, 0))
+                  .group_by(DirectMessage.sender_id).all())
+        unread.update({f'direct_{sender_id}': count for sender_id, count in direct})
+    groups = (db.session.query(GroupMessage.group_id, db.func.count(GroupMessage.id))
+              .join(Group, Group.id == GroupMessage.group_id)
+              .join(GroupMember, db.and_(GroupMember.group_id == GroupMessage.group_id,
+                                        GroupMember.user_id == current_user.id,
+                                        GroupMember.status == 'member'))
+              .outerjoin(ChatLastRead, db.and_(ChatLastRead.user_id == current_user.id,
+                                             ChatLastRead.chat_type == 'group',
+                                             ChatLastRead.chat_id == GroupMessage.group_id))
+              .filter(GroupMessage.user_id != current_user.id,
+                      GroupMessage.id > db.func.coalesce(ChatLastRead.last_read_id, 0))
+              .group_by(GroupMessage.group_id).all())
+    unread.update({f'group_{group_id}': count for group_id, count in groups})
 
     online = {str(f.id): f.is_online for f in friends}
     return jsonify({**unread, 'online': online})
@@ -1324,6 +1341,22 @@ def init_db():
             if 'profile_completed' not in columns:
                 connection.exec_driver_sql(
                     'ALTER TABLE user ADD COLUMN profile_completed BOOLEAN NOT NULL DEFAULT 1')
+            for name, table, columns in (
+                ('book_dm_receiver_sender_id', 'direct_message', 'receiver_id, sender_id, id'),
+                ('book_dm_file_path', 'direct_message', 'file_path'),
+                ('book_gm_group_id', 'group_message', 'group_id, id'),
+                ('book_gm_file_path', 'group_message', 'file_path'),
+                ('book_friend_addressee', 'friendship', 'addressee_id, status'),
+                ('book_group_user_status', 'group_member', 'user_id, status, group_id'),
+                ('book_like_post', 'like', 'post_id'),
+                ('book_comment_post', 'comment', 'post_id, created_at'),
+                ('book_image_post', 'post_image', 'post_id'),
+                ('book_file_post', 'post_file', 'post_id'),
+                ('book_link_post', 'post_video_link', 'post_id'),
+                ('book_post_visibility_created', 'post', 'visibility, created_at'),
+                ('book_post_user_created', 'post', 'user_id, created_at'),
+            ):
+                connection.exec_driver_sql(f'CREATE INDEX IF NOT EXISTS {name} ON "{table}" ({columns})')
         os.makedirs(os.path.join(UPLOAD_FOLDER, 'usericons'), exist_ok=True)
         os.makedirs(os.path.join(UPLOAD_FOLDER, 'chaticons'), exist_ok=True)
         os.makedirs(os.path.join(UPLOAD_FOLDER, 'postpictures'), exist_ok=True)

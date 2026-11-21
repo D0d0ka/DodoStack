@@ -156,8 +156,9 @@ def month_entries(db, month):
             key = day.isoformat()
             if custom["day"] == (key[5:] if custom["yearly"] else key):
                 entries[day].append({"title": custom["title"], "kind": "custom"})
-    labels = countries()
-    for (code,) in db.execute("SELECT code FROM holiday_countries ORDER BY code"):
+    enabled_countries = list(db.execute("SELECT code FROM holiday_countries ORDER BY code"))
+    labels = countries() if enabled_countries else {}
+    for (code,) in enabled_countries:
         if code not in labels:
             continue
         holidays = country_calendar(code, month.year)

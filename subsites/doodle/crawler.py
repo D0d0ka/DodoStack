@@ -3,13 +3,15 @@ import socket
 import threading
 import logging
 from collections import deque
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 
 from urllib3 import HTTPConnectionPool, HTTPSConnectionPool
 from urllib3.exceptions import HTTPError, TimeoutError as FetchTimeout
 from urllib3.util import Timeout
 from urllib3.util import parse_url
 from bs4 import BeautifulSoup
+
+from .urls import youtube_video_id
 
 from .database import get_page_urls, replace_media_assets, upsert_page, url_exists
 
@@ -360,7 +362,7 @@ class CrawlerManager:
         for iframe in soup.find_all('iframe', src=True):
             src = iframe.get('src')
             if cls._extract_youtube_video_id(src):
-                embed_url = cls._normalize_asset_url(src, base_url)
+                embed_url = cls._youtube_embed_url(src)
                 add_asset(
                     'youtube',
                     src,
@@ -415,24 +417,7 @@ class CrawlerManager:
             return None
         return parsed._replace(fragment='').geturl()
 
-    @staticmethod
-    def _extract_youtube_video_id(url: str | None) -> str | None:
-        if not url:
-            return None
-        try:
-            parsed = urlparse(url)
-            host = parsed.netloc.lower()
-            path = parsed.path.strip('/')
-            if 'youtu.be' in host and path:
-                return path.split('/')[0]
-            if 'youtube.com' in host:
-                if path == 'watch':
-                    return parse_qs(parsed.query).get('v', [''])[0] or None
-                if path.startswith('embed/'):
-                    return path.split('/', 1)[1] or None
-            return None
-        except Exception:
-            return None
+    _extract_youtube_video_id = staticmethod(youtube_video_id)
 
     @classmethod
     def _youtube_thumbnail(cls, url: str | None) -> str | None:

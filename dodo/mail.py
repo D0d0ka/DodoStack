@@ -38,6 +38,9 @@ def initialize(db):
     )""")
     db.execute("CREATE INDEX IF NOT EXISTS user_mail_recipient ON user_mail(recipient_id, folder, id DESC)")
     db.execute("CREATE INDEX IF NOT EXISTS user_mail_sender ON user_mail(sender_id, id DESC)")
+    for table in ('mail_messages', 'user_mail'):
+        db.execute(f"""CREATE INDEX IF NOT EXISTS {table}_unread_inbox
+            ON {table}(recipient_id) WHERE folder='inbox' AND is_read=0""")
 
 
 def welcome(db, account_id):

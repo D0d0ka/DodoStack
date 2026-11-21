@@ -8,6 +8,8 @@ import json
 import os
 import time
 from functools import wraps
+from concurrent.futures import ThreadPoolExecutor
+from threading import BoundedSemaphore
 from werkzeug.exceptions import BadRequest, abort
 
 from dodo.pages import SERVICE_DESCRIPTIONS, service_name
@@ -48,6 +50,19 @@ def _text_field(data: dict, key: str) -> str:
     if not isinstance(value, str):
         raise BadRequest(f'{key} must be text')
     return value.strip()
+
+
+def _search_argument(name: str = 'q') -> str:
+    value = request.args.get(name, '').strip()
+    # Bound SQL expression size, ranking work and cache-key memory use.
+    if len(value) > 512:
+        raise BadRequest(f'{name} must be at most 512 characters')
+    return value
+
+
+# A process-wide budget also bounds queued provider jobs under concurrent load.
+_social_pool = ThreadPoolExecutor(max_workers=6, thread_name_prefix='doodle-search')
+_social_requests = BoundedSemaphore(4)
 
 
 # ------------------------------------------------------------------ Settings & admin auth
@@ -537,7 +552,7 @@ def _build_epic_games_search_url(query: str) -> str:
 
 @app.get('/api/search/suggestions')
 def search_suggestions():
-    q = request.args.get('q', '').strip()
+    q = _search_argument()
     try:
         limit = max(1, min(int(request.args.get('limit', 8)), 20))
     except (TypeError, ValueError):
@@ -551,7 +566,7 @@ def search_suggestions():
 
 @app.get('/api/search')
 def search():
-    q = request.args.get('q', '').strip()
+    q = _search_argument()
     sort = (request.args.get('sort') or 'relevance').strip().lower()
     try:
         page = max(1, int(request.args.get('page', 1)))
@@ -559,13 +574,13 @@ def search():
         page = 1
 
     filters = {
-        'from_date': request.args.get('from_date', '').strip(),
-        'to_date': request.args.get('to_date', '').strip(),
-        'domain': request.args.get('domain', '').strip(),
-        'language': request.args.get('language', '').strip().lower(),
-        'content_type': request.args.get('content_type', '').strip().lower(),
+        'from_date': _search_argument('from_date'),
+        'to_date': _search_argument('to_date'),
+        'domain': _search_argument('domain'),
+        'language': _search_argument('language').lower(),
+        'content_type': _search_argument('content_type').lower(),
         'exact_phrase_only': (request.args.get('exact_phrase_only', '').strip().lower() in {'1', 'true', 'yes', 'on'}),
-        'exclude': request.args.get('exclude', '').strip().lower(),
+        'exclude': _search_argument('exclude').lower(),
         'hidden_domains': [] if shared_admin() else database.get_hidden_domains(),
     }
 
@@ -610,7 +625,7 @@ def search():
 
 @app.get('/api/recommended')
 def get_recommended():
-    q = request.args.get('q', '').strip()
+    q = _search_argument()
     try:
         limit = max(1, min(int(request.args.get('limit', 12)), 50))
     except (TypeError, ValueError):
@@ -626,7 +641,7 @@ def get_recommended():
 
 @app.get('/api/search/media')
 def search_media():
-    q = request.args.get('q', '').strip()
+    q = _search_argument()
     kind = request.args.get('kind', '').strip().lower()
     try:
         if kind == 'pictures':
@@ -650,7 +665,7 @@ def search_media():
 
 @app.get('/api/social-search')
 def social_search():
-    q = request.args.get('q', '').strip()
+    q = _search_argument()
     try:
         limit = max(1, min(int(request.args.get('limit', 6)), 15))
     except (TypeError, ValueError):
@@ -671,12 +686,28 @@ def social_search():
             'limit': limit,
         })
 
-    youtube, youtube_error = _search_youtube_official(q, limit)
-    reddit, reddit_error = _search_reddit_official(q, limit)
-    wikipedia, wikipedia_error = _search_wikipedia_official(q, limit)
-    modrinth, modrinth_error = _search_modrinth_official(q, limit)
-    curseforge, curseforge_error = _search_curseforge_official(q, limit)
-    steam, steam_error = _search_steam_official(q, limit)
+    if not _social_requests.acquire(blocking=False):
+        return jsonify({'success': False, 'message': 'Search is busy; please try again'}), 503
+    futures = []
+    try:
+        providers = (_search_youtube_official, _search_reddit_official,
+                     _search_wikipedia_official, _search_modrinth_official,
+                     _search_curseforge_official, _search_steam_official)
+        for provider in providers:
+            futures.append(_social_pool.submit(provider, q, limit))
+        ((youtube, youtube_error), (reddit, reddit_error),
+         (wikipedia, wikipedia_error), (modrinth, modrinth_error),
+         (curseforge, curseforge_error), (steam, steam_error)) = [f.result() for f in futures]
+    finally:
+        # Keep the admission slot until every submitted job finishes, even if
+        # one provider raises unexpectedly.
+        for future in futures:
+            if not future.cancel():
+                try:
+                    future.result()
+                except Exception:
+                    pass
+        _social_requests.release()
     epic_games_search_url = _build_epic_games_search_url(q)
 
     errors = {}

@@ -5,7 +5,10 @@ import hashlib
 import json
 import logging
 from functools import lru_cache
-from urllib.parse import parse_qs, urlparse, parse_qsl, urlencode
+from bisect import bisect_left
+
+from .urls import youtube_video_id, youtube_embed_url
+from urllib.parse import urlparse, parse_qsl, urlencode
 
 log = logging.getLogger(__name__)
 
@@ -43,32 +46,11 @@ MEDIA_HINTS = {
 }
 
 
-def _enable_sqlite_extensions(conn: sqlite3.Connection) -> None:
-    if not hasattr(conn, 'enable_load_extension'):
-        return
-
-    try:
-        conn.enable_load_extension(True)
-    except (AttributeError, sqlite3.OperationalError):
-        return
-
-    try:
-        conn.load_extension('fts5')  # Load full-text search module if available
-    except (AttributeError, sqlite3.OperationalError, ImportError, ModuleNotFoundError):
-        pass
-    finally:
-        try:
-            conn.enable_load_extension(False)
-        except (AttributeError, sqlite3.OperationalError):
-            pass
-
-
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.create_function('domain_hidden', 2, _domain_hidden, deterministic=True)
     conn.execute('PRAGMA foreign_keys = ON')
-    _enable_sqlite_extensions(conn)
     return conn
 
 
@@ -1027,6 +1009,7 @@ def _search_media_assets_cached(normalized_query: str, kind: str, limit: int) ->
     conn.close()
 
     results = []
+    page_context = {}
     for row in rows:
         title = row['title'] or row['page_title'] or row['url']
         
@@ -1048,28 +1031,25 @@ def _search_media_assets_cached(normalized_query: str, kind: str, limit: int) ->
         # Media score bonus for matching hints (images, videos, etc.)
         media_hint_score = _media_score(kind, row['url'] or '', title, '')
         
-        # Page-level relevance as secondary signal (very low weight)
-        page_query_score = _search_score(
-            url=row['page_url'] or '',
-            title=row['page_title'] or '',
-            content=row['page_content'] or '',
-            query_terms=query_terms,
-            query_phrases=query_phrases,
-        )
-        
-        # Combine: media asset match is primary, page context is secondary
-        if media_query_score > 0:
-            combined_score = media_query_score * 3 + media_hint_score + (page_query_score // 4)
-        else:
-            # Page content matched but media asset itself didn't — skip entirely
-            # This prevents false positives like random images from pages that
-            # just happen to mention the search term in their text
+        if media_query_score <= 0:
             continue
-        
+
+        # A page can have hundreds of assets; rank and summarize it only once.
+        page_url = row['page_url']
+        if page_url not in page_context:
+            page_context[page_url] = (
+                _search_score(page_url or '', row['page_title'] or '', row['page_content'] or '',
+                              query_terms, query_phrases),
+                _make_snippet(row['page_content'] or '', query_phrases + query_terms),
+            )
+        page_query_score, snippet = page_context[page_url]
+        combined_score = media_query_score * 3 + media_hint_score + (page_query_score // 4)
+
         if combined_score <= 0:
             continue
 
-        if kind == 'youtube' and not (row['embed_url'] or _extract_youtube_video_id(row['url'] or '')):
+        safe_embed = youtube_embed_url(row['url']) or youtube_embed_url(row['embed_url'])
+        if kind == 'youtube' and not safe_embed:
             continue
 
         results.append({
@@ -1078,11 +1058,11 @@ def _search_media_assets_cached(normalized_query: str, kind: str, limit: int) ->
             'url': row['url'],
             'title': title,
             'thumbnail_url': row['thumbnail_url'],
-            'embed_url': row['embed_url'],
+            'embed_url': safe_embed if kind == 'youtube' else row['embed_url'],
             'source_url': row['source_url'] or row['page_url'],
             'duration': row['duration'],
             'page_url': row['page_url'],
-            'snippet': _make_snippet(row['page_content'] or '', query_phrases + query_terms),
+            'snippet': snippet,
             'youtube_id': _extract_youtube_video_id(row['url'] or '') or _extract_youtube_video_id(row['embed_url'] or ''),
             'media_match': True,
             'score': combined_score,
@@ -1342,15 +1322,13 @@ def _build_multi_column_like_filter(columns: list[str], terms: list[str], requir
     clauses: list[str] = []
     params: list[str] = []
     for term in cleaned_terms:
-        # Optimized: prefer prefix search over substring search for better relevance
+        # Substring matching already includes every prefix match.
         part_clauses = [
-            f'(LOWER(COALESCE({col}, "")) LIKE ? OR LOWER(COALESCE({col}, "")) LIKE ?)'
+            f'LOWER(COALESCE({col}, "")) LIKE ?'
             for col in columns
         ]
         clauses.append('(' + ' OR '.join(part_clauses) + ')')
-        # First pattern: word boundary start, second pattern: substring
-        for col in columns:
-            params.extend([f'{term}%', f'%{term}%'])
+        params.extend([f'%{term}%'] * len(columns))
 
     joiner = ' AND ' if require_all else ' OR '
     return ' AND (' + joiner.join(clauses) + ')', params
@@ -1384,6 +1362,8 @@ def _search_score(url: str, title: str, content: str, query_terms: list[str], qu
         total += url_lc.count(phrase) * 25
         total += content_lc.count(phrase) * 12
 
+    # Reuse these counts for the multi-term bonus below.
+    term_matches = {}
     # Token scoring prefers exact word boundaries
     for term in query_terms:
         if not term:
@@ -1391,6 +1371,7 @@ def _search_score(url: str, title: str, content: str, query_terms: list[str], qu
         title_matches = _count_word_matches(title_lc, term)
         url_matches = _count_word_matches(url_lc, term)
         content_matches = _count_word_matches(content_lc, term)
+        term_matches[term] = (title_matches, content_matches)
         
         # Boost for title matches significantly
         total += title_matches * 25
@@ -1412,7 +1393,7 @@ def _search_score(url: str, title: str, content: str, query_terms: list[str], qu
     if query_terms:
         matched_terms = 0
         for term in query_terms:
-            if _count_word_matches(title_lc, term) > 0 or _count_word_matches(content_lc, term) > 0:
+            if any(term_matches.get(term, (0, 0))):
                 matched_terms += 1
         if matched_terms == len(query_terms):
             total += 40
@@ -1508,25 +1489,7 @@ def _media_score(kind: str, url: str, title: str, content: str) -> int:
     return score
 
 
-def _extract_youtube_video_id(url: str) -> str | None:
-    try:
-        parsed = urlparse(url)
-        host = parsed.netloc.lower()
-        path = parsed.path.strip('/')
-
-        if 'youtu.be' in host and path:
-            return path.split('/')[0]
-
-        if 'youtube.com' in host:
-            if path == 'watch':
-                video_id = parse_qs(parsed.query).get('v', [''])[0]
-                return video_id or None
-            if path.startswith('embed/'):
-                return path.split('/', 1)[1] or None
-
-        return None
-    except Exception:
-        return None
+_extract_youtube_video_id = youtube_video_id
 
 
 def _make_snippet(content: str, keywords: list[str], length: int = 220) -> str:
@@ -1558,12 +1521,14 @@ def _make_snippet(content: str, keywords: list[str], length: int = 220) -> str:
         raw = text[:length]
         return raw + ('…' if len(text) > length else '')
 
+    # Preserve original tie order; binary search replaces a quadratic scan.
+    sorted_positions = sorted(positions)
     best_start = 0
     best_score = -1
     for pos in positions:
         start = max(0, pos - (length // 3))
         end = min(len(content_lc), start + length)
-        score = sum(1 for p in positions if start <= p < end)
+        score = bisect_left(sorted_positions, end) - bisect_left(sorted_positions, start)
         if score > best_score:
             best_score = score
             best_start = start

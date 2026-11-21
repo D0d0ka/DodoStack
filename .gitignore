@@ -11,3 +11,4 @@ instance/
 .DS_Store
 
 tests/
+checks/

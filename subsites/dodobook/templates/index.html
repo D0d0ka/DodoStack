@@ -335,7 +335,7 @@
                 <h2 class="muted">{{ item.post.subtitle }}</h2>
                 {% endif %}
 
-                {% set post_images = item.post.images.all() %}
+                {% set post_images = item.images %}
                 {% if post_images %}
                 <div class="post-image-carousel" data-carousel="carousel{{ item.post.id }}">
                     <div class="carousel-container">
@@ -360,7 +360,7 @@
                 <p>{{ item.post.content | post_content }}</p>
                 {% endif %}
 
-                {% set post_files = item.post.attachments.all() %}
+                {% set post_files = item.files %}
                 {% if post_files %}
                 <div class="post-files">
                     {% for pf in post_files %}
@@ -385,7 +385,7 @@
                 </div>
                 {% endif %}
 
-                {% set post_video_links = item.post.video_links.all() %}
+                {% set post_video_links = item.video_links %}
                 {% if post_video_links %}
                 <div class="post-video-links">
                     {% for pvl in post_video_links %}
@@ -408,7 +408,7 @@
                                 <button onclick="submitComment(this, {{ item.post.id }})">Post</button>
                             </div>
                             <div class="comments-items">
-                                {% for comment in item.post.comments %}
+                                {% for comment in item.comments %}
                                 <div class="comment-item">
                                     <div class="comment-author">{{ comment.author.username }}</div>
                                     <div class="comment-text">{{ comment.text }}</div>

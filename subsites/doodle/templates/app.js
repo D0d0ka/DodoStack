@@ -12,6 +12,8 @@ const _cache = {
 
 let _searchTimeout = null;
 let _isSearching = false;
+let _searchController = null;
+let _searchGeneration = 0;
 let _searchPaginationState = {
   page: 1,
   totalPages: 0,
@@ -67,7 +69,7 @@ async function _renderProgressively(containerEl, items, buildHtml, q) {
   spinner.innerHTML = '<div class="spinner spinner-sm"></div><span>Loading more results...</span>';
   containerEl.appendChild(spinner);
 
-  await new Promise(r => setTimeout(r, 380));
+  await new Promise(r => setTimeout(r, 0));
   if (!containerEl.contains(spinner)) return;
 
   spinner.remove();
@@ -537,6 +539,11 @@ function renderServiceResult(query) {
 async function doSearch(q, preferredTab = 'all', optionsOverride = null, page = 1) {
   if (!q) return;
 
+  const generation = ++_searchGeneration;
+  _searchController?.abort();
+  _searchController = new AbortController();
+  _isSearching = false;
+
   renderServiceResult(q);
   checkEasterEgg(q);
 
@@ -572,19 +579,21 @@ async function doSearch(q, preferredTab = 'all', optionsOverride = null, page = 
   try {
     const params = new URLSearchParams({ q, page: String(safePage) });
     appendSearchOptions(params, options);
-    const fetchOpts = undefined;
-    const res  = await fetch(`${API}/search?${params.toString()}`, fetchOpts);
+    const res = await fetch(`${API}/search?${params.toString()}`, { signal: _searchController.signal });
+    if (!res.ok) throw new Error("Search failed");
     const data = await res.json();
+    if (generation !== _searchGeneration) return;
     setCachedSearch(cacheKey, data);
     renderResults(data);
     syncSearchInUrl(activeTab, q, options, data.page || safePage);
     if (activeTab !== 'all') switchTab(activeTab);
-  } catch {
+  } catch (error) {
+    if (generation !== _searchGeneration || error.name === 'AbortError') return;
     $('resultsSummary').textContent = '';
     $('resultsList').innerHTML =
       '<p class="no-results">Could not reach the backend. Is it running?</p>';
   } finally {
-    _isSearching = false;
+    if (generation === _searchGeneration) _isSearching = false;
   }
 }
 

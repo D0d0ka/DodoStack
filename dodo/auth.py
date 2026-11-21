@@ -1,6 +1,7 @@
 """Shared account store and short-lived, audience-scoped service sessions."""
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import date
 from pathlib import Path
 from urllib.parse import quote, urlencode
@@ -66,6 +67,10 @@ def normalized_email(value: str) -> str:
         raise ValueError("Enter a valid email address.") from error
 
 
+# A failed lookup still performs the normal password work to reduce account
+# enumeration through username, email and DodoMail sign-in timings.
+_DUMMY_PASSWORD_HASH = 'pbkdf2_sha256$310000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+
 DMAIL_LOCAL = r"[a-z0-9]+(?:[._-][a-z0-9]+)*"
 
 
@@ -108,7 +113,7 @@ class AccountStore:
             raise ValueError("DODO_MIN_PASSWORD_LENGTH must be between 1 and 255.")
         self.min_password_length = min_password_length
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             db.execute("BEGIN IMMEDIATE")
             db.execute("""CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,10 +141,11 @@ class AccountStore:
                            (json.dumps(list(ADMIN_PERMISSIONS)),))
                 db.execute("UPDATE users SET is_owner=1 WHERE id=(SELECT id FROM users "
                            "WHERE is_admin=1 AND approved=1 ORDER BY id LIMIT 1)")
+            db.execute("CREATE INDEX IF NOT EXISTS users_email_lower ON users(lower(email))")
             initialize_mail(db)
 
     def redeem_ticket(self, nonce, expires):
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             db.execute("DELETE FROM redeemed_tickets WHERE expires < ?", (int(time.time()),))
             return db.execute("INSERT OR IGNORE INTO redeemed_tickets VALUES (?, ?)",
                               (nonce, expires)).rowcount == 1
@@ -186,11 +192,12 @@ class AccountStore:
             lookup = "lower(email)=lower(?)"
         else:
             lookup = "username=?"
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             user = db.execute(
                 "SELECT id, username, password_hash FROM users WHERE " + lookup, (identifier,),
             ).fetchone()
-        if user and self.verify_password(password, user["password_hash"]):
+        valid = self.verify_password(password, user["password_hash"] if user else _DUMMY_PASSWORD_HASH)
+        if user and valid:
             return {"id": user["id"], "username": user["username"]}
         return None
 
@@ -199,7 +206,7 @@ class AccountStore:
             email = normalized_email(email)
         except ValueError:
             return None
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             row = db.execute("SELECT id FROM users WHERE lower(email)=lower(?)", (email,)).fetchone()
         return row["id"] if row else None
 
@@ -209,13 +216,13 @@ class AccountStore:
                 "approved": bool(row["approved"]), "admin_permissions": json.loads(row["admin_permissions"])}
 
     def account(self, user_id):
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             row = db.execute("SELECT id, username, email, is_admin, is_owner, admin_permissions, approved FROM users WHERE id=?", (user_id,)).fetchone()
         return self.account_roles(row) if row else None
 
     def set_admin(self, username, enabled):
         """Trusted local CLI/bootstrap operation; browser changes use set_role."""
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             db.execute("BEGIN IMMEDIATE")
             user = db.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
             if not user:
@@ -229,7 +236,7 @@ class AccountStore:
 
     def set_owner(self, username):
         """Trusted local CLI operation for assigning or recovering ownership."""
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             if not db.execute(
                 "UPDATE users SET is_owner=1, is_admin=1, approved=1, admin_permissions='[]' WHERE username=?",
                 (username,),
@@ -239,7 +246,7 @@ class AccountStore:
     def set_role(self, actor_id, username, role, permissions):
         if role not in {"member", "admin", "owner"} or not set(permissions) <= ADMIN_PERMISSIONS.keys():
             raise ValueError("Choose a valid role and permissions.")
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             db.execute("BEGIN IMMEDIATE")
             if not db.execute("SELECT 1 FROM users WHERE id=? AND is_owner=1 AND approved=1", (actor_id,)).fetchone():
                 raise PermissionError
@@ -253,7 +260,7 @@ class AccountStore:
                         role != "member", user["id"]))
 
     def list_accounts(self):
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             return [self.account_roles(row) for row in db.execute(
                 "SELECT id, username, is_admin, is_owner, admin_permissions, approved, password_reset_requested FROM users ORDER BY approved, username")]
 
@@ -273,7 +280,7 @@ class AccountStore:
             raise PermissionError
 
     def restrict_account(self, actor_id, account_id, *, delete):
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             db.execute("BEGIN IMMEDIATE")
             user = db.execute("SELECT * FROM users WHERE id=?", (account_id,)).fetchone()
             if not user:
@@ -290,7 +297,7 @@ class AccountStore:
     def manage_account(self, actor_id, username, *, password=None):
         if password is not None:
             self.validate_password(password)
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             db.execute("BEGIN IMMEDIATE")
             user = db.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
             if not user:
@@ -303,7 +310,7 @@ class AccountStore:
                            (self.hash_password(password), user["id"]))
 
     def request_password_reset(self, username):
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             db.execute("UPDATE users SET password_reset_requested=1 WHERE username=?", (username,))
 
     def validate_password(self, password):
@@ -312,14 +319,14 @@ class AccountStore:
 
     def reset_password(self, username, password):
         self.validate_password(password)
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             db.execute(
                 "UPDATE users SET password_hash=?, session_version=session_version+1, password_reset_requested=0 WHERE username=?",
                 (self.hash_password(password), username),
             )
 
     def session_version(self, user_id: int) -> int:
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             row = db.execute("SELECT session_version FROM users WHERE id=?", (user_id,)).fetchone()
         return int(row[0]) if row else -1
 
@@ -331,20 +338,20 @@ class AccountStore:
             return False
 
     def revoke_sessions(self, user_id: int) -> None:
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             db.execute("UPDATE users SET session_version=session_version+1 WHERE id=?", (user_id,))
 
     def set_email(self, user_id: int, email: str):
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             db.execute("UPDATE users SET email=? WHERE id=?", (normalized_email(email), user_id))
 
     def approve(self, username: str):
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             db.execute("UPDATE users SET approved=1 WHERE username=?", (username,))
 
     def suggest_dmail(self, first_name, last_name):
         base = name_local_part(clean_name(first_name), clean_name(last_name))
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             candidate, number = base, 2
             while candidate + "@dmail" == SUPPORT_ADDRESS or db.execute(
                 "SELECT 1 FROM users WHERE dmail_address=?", (candidate + "@dmail",),
@@ -367,7 +374,7 @@ class AccountStore:
             raise ValueError("Use up to 64 letters (a–z) or digits, separated by dots, underscores or hyphens.")
         address = local + "@dmail"
         password_hash = self.hash_password(password)
-        with self.connect() as db:
+        with closing(self.connect()) as db, db:
             db.execute("BEGIN IMMEDIATE")
             if address == SUPPORT_ADDRESS or db.execute(
                 "SELECT 1 FROM users WHERE dmail_address=?", (address,),
